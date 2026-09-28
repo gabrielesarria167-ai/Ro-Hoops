@@ -2,36 +2,36 @@
 -- configuring general player attributes
 local categories = { "Finishing", "Shooting", "Playmaking", "Defense", "Physicals", "Athleticism" }
 local list = {
-	{ "Three", "Three-Point Shot", category = "Shooting" },
-	{ "Mid", "Mid-range Shot", category = "Shooting" },
-	{ "Fade", "Fadeaway Shot", category = "Shooting" },
-	{ "Tough", "Tough Shot", category = "Shooting" },
+	{ id = "Three", displayName = "Three-Point Shot", category = "Shooting" },
+	{ id = "Mid", displayName = "Mid-range Shot", category = "Shooting" },
+	{ id = "Fade", displayName = "Fadeaway Shot", category = "Shooting" },
+	{ id = "Tough", displayName = "Tough Shot", category = "Shooting" },
 
-	{ "Layup", "Layup", category = "Finishing" },
-	{ "MovingDunk", "Moving Dunk", category = "Finishing" },
-	{ "StandingDunk", "Standing Dunk", category = "Finishing" },
-	{ "Floater", "Floater", category = "Finishing" },
+	{ id = "Layup", displayName = "Layup", category = "Finishing" },
+	{ id = "MovingDunk", displayName = "Moving Dunk", category = "Finishing" },
+	{ id = "StandingDunk", displayName = "Standing Dunk", category = "Finishing" },
+	{ id = "Floater", displayName = "Floater", category = "Finishing" },
 
-	{ "Pass", "Passing", category = "Playmaking" },
-	{ "SpeedBall", "Speed With Ball", category = "Playmaking" },
-	{ "Handle", "Ball Handling", category = "Playmaking" },
+	{ id = "Pass", displayName = "Passing", category = "Playmaking" },
+	{ id = "SpeedBall", displayName = "Speed With Ball", category = "Playmaking" },
+	{ id = "Handle", displayName = "Ball Handling", category = "Playmaking" },
 
-	{ "PerimeterD", "Perimeter Defense", category = "Defense" },
-	{ "InsideD", "Inside Defense", category = "Defense" },
-	{ "OffD", "Off-Ball Defense", category = "Defense" },
-	{ "OnD", "On-Ball Defense", category = "Defense" },
-	{ "Steal", "Steal", category = "Defense" },
-	{ "Block", "Block", category = "Defense" },
+	{ id = "PerimeterD", displayName = "Perimeter Defense", category = "Defense" },
+	{ id = "InsideD", displayName = "Inside Defense", category = "Defense" },
+	{ id = "OffD", displayName = "Off-Ball Defense", category = "Defense" },
+	{ id = "OnD", displayName = "On-Ball Defense", category = "Defense" },
+	{ id = "Steal", displayName = "Steal", category = "Defense" },
+	{ id = "Block", displayName = "Block", category = "Defense" },
 
-	{ "Strength", "Strength", category = "Physicals" },
-	{ "Post", "Post-Up", category = "Physicals" },
-	{ "Box", "Box Out", category = "Physicals" },
+	{ id = "Strength", displayName = "Strength", category = "Physicals" },
+	{ id = "Post", displayName = "Post-Up", category = "Physicals" },
+	{ id = "Box", displayName = "Box Out", category = "Physicals" },
 
-	{ "Speed", "Speed", category = "Athleticism" },
-	{ "Rebound", "Rebounding", category = "Athleticism" },
-	{ "Vertical", "Vertical", category = "Athleticism" },
-	{ "Stamina", "Stamina", category = "Athleticism" },
-	{ "Acceleration", "Acceleration", category = "Athleticism" },
+	{ id = "Speed", displayName = "Speed", category = "Athleticism" },
+	{ id = "Rebound", displayName = "Rebounding", category = "Athleticism" },
+	{ id = "Vertical", displayName = "Vertical", category = "Athleticism" },
+	{ id = "Stamina", displayName = "Stamina", category = "Athleticism" },
+	{ id = "Acceleration", displayName = "Acceleration", category = "Athleticism" },
 }
 
 local MIN_RATING = 30
