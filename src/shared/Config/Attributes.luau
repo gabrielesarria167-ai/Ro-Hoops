@@ -1,6 +1,6 @@
 --!strict
 -- configuring general player attributes
-local categories = { "Finishing", "Shooting", "Playmaking", "Defense", "Physicals", "Athleticism" }
+local categories = table.freeze({ "Finishing", "Shooting", "Playmaking", "Defense", "Physicals", "Athleticism" })
 local list = {
 	{ id = "Three", displayName = "Three-Point Shot", category = "Shooting" },
 	{ id = "Mid", displayName = "Mid-range Shot", category = "Shooting" },
@@ -33,6 +33,10 @@ local list = {
 	{ id = "Stamina", displayName = "Stamina", category = "Athleticism" },
 	{ id = "Acceleration", displayName = "Acceleration", category = "Athleticism" },
 }
+
+for _, attribute in list do
+	table.freeze(attribute)
+end
 
 local MIN_RATING = 30
 local MAX_RATING = 99

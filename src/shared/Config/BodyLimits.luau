@@ -9,7 +9,7 @@ export type CapRow = { base: number, height: number, weight: number, wingspan: n
 
 -- Caps: effect = cap change at the max of that body stat (the opposite at the min).
 -- base = 99 - sum(|effects|), so only the ideal extreme body reaches 99.
-local CAPS: {[string]: CapRow} = {
+local CAPS: { [string]: CapRow } = {
 	-- Shooting: short, light, short arms shoot best (except Fade)
 	Three = { base = 80, height = -12, weight = -4, wingspan = -3 },
 	Mid = { base = 86, height = -8, weight = -3, wingspan = -2 },
@@ -43,7 +43,7 @@ local CAPS: {[string]: CapRow} = {
 	-- Athleticism
 	Speed = { base = 77, height = -12, weight = -10, wingspan = 0 },
 	Rebound = { base = 73, height = 14, weight = 6, wingspan = 6 },
-	Vertical = { base = 75, height = -8, weight = 8, wingspan = 0 },
+	Vertical = { base = 83, height = -8, weight = 8, wingspan = 0 },
 	Acceleration = { base = 80, height = -10, weight = -9, wingspan = 0 },
 	Stamina = { base = 82, height = -10, weight = -7, wingspan = 0 },
 }
