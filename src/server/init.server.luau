@@ -1,6 +1,6 @@
+--!strict
 -- server initializer, finds modulescripts and inserts them inside the table
 
---!strict
 local moduleTable = {}
 
 for _, child in script.Services:GetChildren() do
