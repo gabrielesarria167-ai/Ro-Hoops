@@ -4,7 +4,7 @@
 
 To setup, you need to run:
 
-```.md
+```bash
 rokit install
 wally install
 rojo serve
