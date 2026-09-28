@@ -7,10 +7,10 @@ for _, child in script.Controllers:GetChildren() do
 	end
 end
 
-for _,item in moduleTable do
-    item:Init()
+for _, item in moduleTable do
+	item:Init()
 end
 
-for _,item in moduleTable do
-    task.spawn(item:Start())
+for _, item in moduleTable do
+	task.spawn(item.Start, item)
 end

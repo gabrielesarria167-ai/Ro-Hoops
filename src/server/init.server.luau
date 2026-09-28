@@ -1,3 +1,5 @@
+-- server initializer, finds modulescripts and inserts them inside the table
+
 --!strict
 local moduleTable = {}
 
@@ -7,10 +9,12 @@ for _, child in script.Services:GetChildren() do
 	end
 end
 
-for _,item in moduleTable do
-    item:Init()
+-- initializes every modulescript, and then starts them up
+
+for _, item in moduleTable do
+	item:Init()
 end
 
-for _,item in moduleTable do
-    task.spawn(item:Start())
+for _, item in moduleTable do
+	task.spawn(item.Start, item)
 end
