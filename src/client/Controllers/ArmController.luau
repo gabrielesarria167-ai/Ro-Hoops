@@ -33,9 +33,14 @@ type Arm = {
 
 local ArmController = {}
 
--- The current character's arms, or nil if it has none we can drive (e.g. R6).
+-- The current character's arms, or nil if they aren't set up (yet).
 local rightArm: Arm? = nil -- shooting / dribbling hand
 local leftArm: Arm? = nil -- guide hand
+
+-- How often (seconds) to retry setting up arms that couldn't be found, e.g. while the
+-- avatar is still loading or on an R6 character that will never have them.
+local RETRY_INTERVAL = 0.5
+local nextRetryAt = 0 -- clock time of the next retry
 
 -- Converts a Motion-config offset (right, up, forward) to Roblox's object space, where
 -- forward is -Z.
@@ -88,6 +93,39 @@ local function destroyArm(arm: Arm?)
 	end
 end
 
+-- True if `arm` is still attached to body parts inside `character`. When the avatar's
+-- appearance loads, Roblox swaps in new arm parts, which leaves an old IK attached to
+-- parts that no longer exist.
+local function isAttached(arm: Arm?, character: Model): boolean
+	if not arm or not arm.ik.Parent then
+		return false
+	end
+	local chainRoot, endEffector = arm.ik.ChainRoot, arm.ik.EndEffector
+	return chainRoot ~= nil
+		and endEffector ~= nil
+		and chainRoot:IsDescendantOf(character)
+		and endEffector:IsDescendantOf(character)
+end
+
+-- Makes sure both arms have working IK on the current body parts, rebuilding them if the
+-- parts were missing or replaced. Returns true when both arms are ready.
+local function ensureArms(humanoid: Humanoid, character: Model): boolean
+	if isAttached(rightArm, character) and isAttached(leftArm, character) then
+		return true
+	end
+	local now = os.clock()
+	if now < nextRetryAt then
+		return false
+	end
+	nextRetryAt = now + RETRY_INTERVAL
+
+	destroyArm(rightArm)
+	destroyArm(leftArm)
+	rightArm = makeArm(humanoid, character, "Right")
+	leftArm = makeArm(humanoid, character, "Left")
+	return rightArm ~= nil and leftArm ~= nil
+end
+
 -- Moves an arm's weight toward `goal` (0 = normal animation, 1 = wrist on target) smoothly.
 local function blendWeight(arm: Arm, goal: number, alpha: number)
 	arm.ik.Weight += (goal - arm.ik.Weight) * alpha
@@ -97,10 +135,10 @@ end
 -- Runs every frame after the ball has been positioned.
 local function update(dt: number)
 	local parts = CharacterRef.get()
-	local right, left = rightArm, leftArm
-	if not parts or not right or not left then
+	if not parts or not ensureArms(parts.humanoid, parts.character) then
 		return
 	end
+	local right, left = rightArm :: Arm, leftArm :: Arm
 
 	local rootCFrame = parts.root.CFrame
 	local ballPosition = BallController.getPosition()
@@ -139,11 +177,13 @@ local function update(dt: number)
 end
 
 function ArmController.start()
-	CharacterRef.onSpawn(function(parts)
+	-- On a new character, drop the old arms; update() sets up the new ones once the
+	-- character's body parts exist.
+	CharacterRef.onSpawn(function()
 		destroyArm(rightArm)
 		destroyArm(leftArm)
-		rightArm = makeArm(parts.humanoid, parts.character, "Right")
-		leftArm = makeArm(parts.humanoid, parts.character, "Left")
+		rightArm, leftArm = nil, nil
+		nextRetryAt = 0
 	end)
 	-- Runs just after BallController (Character + 1) so the hands use this frame's ball position.
 	RunService:BindToRenderStep("RoHoopsArms", Enum.RenderPriority.Character.Value + 2, update)
