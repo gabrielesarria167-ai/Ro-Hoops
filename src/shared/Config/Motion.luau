@@ -4,7 +4,7 @@
 --   1. DIP     – knees bend, the ball comes into both hands at the chest
 --   2. RISE    – legs drive up into the jump, the ball rises past the face
 --   3. RELEASE – at the top, the ball is above the head on a fully extended shooting arm
---   4. FOLLOW-THROUGH – both arms stay up while you come down
+--   4. FOLLOW-THROUGH – both arms reach toward the rim, hold, then fall forward
 -- Used by BallController (ball path), ArmController (hands), LegController (knees and legs)
 -- and ShotController (turning and jump timing).
 --
@@ -56,21 +56,31 @@ local Motion = {
 	DRIBBLE_FINGERS = Vector3.new(0, -0.2, 1),
 	DRIBBLE_PALM_MIN_HEIGHT = 2.1,
 
-	-- FOLLOW-THROUGH: after release both arms reach up toward the rim (they straighten as
-	-- far as they can) and hold for FOLLOW_THROUGH_TIME seconds. The shooting hand finishes
-	-- in a "gooseneck": wrist flicked, palm facing down, fingers pointing at the rim.
-	FOLLOW_THROUGH = Vector3.new(0.5, 2.8, 1.1), -- shooting palm position (from the hips); out of reach, so the arm straightens
+	-- FOLLOW-THROUGH: right after release both arms reach up and forward toward the rim
+	-- (they straighten as far as they can). The shooting hand is in a "gooseneck": wrist
+	-- flicked, palm facing down, fingers pointing at the rim. After a short hold the arms
+	-- fall forward to the END positions, then relax back to normal animation.
+	FOLLOW_THROUGH = Vector3.new(0.45, 2.3, 1.9), -- shooting palm at release (from the hips)
 	FOLLOW_THROUGH_FACING = Vector3.new(0, -0.6, -0.8), -- which way that palm faces
 	FOLLOW_THROUGH_FINGERS = Vector3.new(0, -0.8, 0.6), -- which way its fingers point
-	GUIDE_FOLLOW_THROUGH = Vector3.new(-0.6, 2.6, 0.9), -- guide palm: up beside it, a bit lower
+	GUIDE_FOLLOW_THROUGH = Vector3.new(-0.55, 2.1, 1.7), -- guide palm: up beside it, a bit lower
 	GUIDE_FOLLOW_THROUGH_FACING = Vector3.new(1, 0, 0), -- guide palm faces the shooting hand
-	FOLLOW_THROUGH_TIME = 0.7,
+	-- Where the arms fall to: in front of the body, around chest height, hands relaxed.
+	FOLLOW_THROUGH_END = Vector3.new(0.4, 0.9, 1.8), -- shooting palm
+	GUIDE_FOLLOW_THROUGH_END = Vector3.new(-0.5, 0.7, 1.6), -- guide palm
+	FOLLOW_THROUGH_END_FINGERS = Vector3.new(0, -0.5, 0.85), -- relaxed fingers, forward and down
+	-- Total follow-through time (seconds), and the fraction of it spent holding the arms up
+	-- before they start falling forward.
+	FOLLOW_THROUGH_TIME = 0.9,
+	FOLLOW_THROUGH_HOLD = 0.35,
 
 	-- How smoothly the hands move. IK_SMOOTH_TIME is how long a hand takes to catch up
-	-- with its target, in seconds (0 = instantly, rigid). IK_BLEND_SHARPNESS is how fast
-	-- an arm switches between "following the ball" and "normal animation" (higher = faster).
+	-- with its target, in seconds (0 = instantly, rigid). IK_BLEND_SHARPNESS is how fast an
+	-- arm takes hold of the ball (higher = faster); IK_RELAX_SHARPNESS is how fast it lets
+	-- go back to the normal animation, e.g. arms settling down after the follow-through.
 	IK_SMOOTH_TIME = 0.02,
 	IK_BLEND_SHARPNESS = 12,
+	IK_RELAX_SHARPNESS = 4,
 
 	-- LEGS (leg IK) ---------------------------------------------------------------------
 

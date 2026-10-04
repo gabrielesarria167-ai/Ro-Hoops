@@ -9,8 +9,9 @@
 --             ball bounces down and back up.
 --   Held    – shooting hand behind the ball in the dip, sliding under it as it rises to the
 --             release point above the head; guide hand on the side the whole way.
---   Flight  – both arms reach up toward the rim with the shooting wrist flicked (the
---             follow-through), hold, then relax back to normal animation.
+--   Flight  – both arms reach up and forward toward the rim with the shooting wrist
+--             flicked (the follow-through), hold, fall forward, then relax back to
+--             normal animation.
 --
 -- Only works for R15 characters (the default); R6 characters just skip it.
 -- Tuning values: src/shared/Config/Motion.luau.
@@ -87,6 +88,12 @@ local function ensureArms(humanoid: Humanoid, character: Model): boolean
 	return rightArm ~= nil and leftArm ~= nil
 end
 
+-- Eases 0→1 gently at both ends (smoothstep), for motion that starts and stops softly.
+local function ease(p: number): number
+	p = math.clamp(p, 0, 1)
+	return p * p * (3 - 2 * p)
+end
+
 -- Puts `arm`'s palm on the ball at `direction` (from the ball's centre, world space),
 -- facing the centre, fingers pointing `fingers`.
 local function palmOnBall(arm: LimbIK.Limb, ballPosition: Vector3, direction: Vector3, fingers: Vector3)
@@ -109,6 +116,7 @@ local function update(dt: number)
 	end
 	local ballPosition = BallController.getPosition()
 	local mode = BallController.getMode()
+	local sinceRelease = os.clock() - BallController.getLaunchTime()
 	local rightGoal, leftGoal = 0, 0 -- how much each arm should follow its target this frame
 
 	if mode == "Dribble" then
@@ -135,28 +143,37 @@ local function update(dt: number)
 		right.pole.WorldPosition = fromHips(rootCFrame, Motion.SHOOTING_ELBOW)
 		left.pole.WorldPosition = fromHips(rootCFrame, Motion.GUIDE_ELBOW)
 		rightGoal, leftGoal = 1, 1
-	elseif os.clock() - BallController.getLaunchTime() < Motion.FOLLOW_THROUGH_TIME then
-		-- Follow-through: both arms reach up toward the rim and hold; shooting wrist flicked.
+	elseif sinceRelease < Motion.FOLLOW_THROUGH_TIME then
+		-- Follow-through: arms reach up and forward toward the rim, hold for the first
+		-- FOLLOW_THROUGH_HOLD of the time, then fall forward to the END positions.
+		-- `fall` goes 0 (arms up) → 1 (arms fallen forward).
+		local progress = sinceRelease / Motion.FOLLOW_THROUGH_TIME
+		local hold = math.clamp(Motion.FOLLOW_THROUGH_HOLD, 0, 0.95)
+		local fall = ease((progress - hold) / (1 - hold))
 		LimbIK.placeHand(
 			right,
-			fromHips(rootCFrame, Motion.FOLLOW_THROUGH),
+			fromHips(rootCFrame, Motion.FOLLOW_THROUGH:Lerp(Motion.FOLLOW_THROUGH_END, fall)),
 			bodyDirection(Motion.FOLLOW_THROUGH_FACING),
-			bodyDirection(Motion.FOLLOW_THROUGH_FINGERS)
+			bodyDirection(Motion.FOLLOW_THROUGH_FINGERS:Lerp(Motion.FOLLOW_THROUGH_END_FINGERS, fall))
 		)
 		LimbIK.placeHand(
 			left,
-			fromHips(rootCFrame, Motion.GUIDE_FOLLOW_THROUGH),
+			fromHips(rootCFrame, Motion.GUIDE_FOLLOW_THROUGH:Lerp(Motion.GUIDE_FOLLOW_THROUGH_END, fall)),
 			bodyDirection(Motion.GUIDE_FOLLOW_THROUGH_FACING),
-			bodyDirection(Motion.GUIDE_FINGERS)
+			bodyDirection(Motion.GUIDE_FINGERS:Lerp(Motion.FOLLOW_THROUGH_END_FINGERS, fall))
 		)
 		right.pole.WorldPosition = fromHips(rootCFrame, Motion.SHOOTING_ELBOW)
 		left.pole.WorldPosition = fromHips(rootCFrame, Motion.GUIDE_ELBOW)
 		rightGoal, leftGoal = 1, 1
 	end
 
-	local alpha = MovementMath.smoothingAlpha(Motion.IK_BLEND_SHARPNESS, dt)
-	LimbIK.blend(right, rightGoal, alpha)
-	LimbIK.blend(left, leftGoal, alpha)
+	-- Take hold quickly, let go slowly (so the arms settle down instead of dropping).
+	local function alphaFor(goal: number, arm: LimbIK.Limb): number
+		local sharpness = if goal < arm.ik.Weight then Motion.IK_RELAX_SHARPNESS else Motion.IK_BLEND_SHARPNESS
+		return MovementMath.smoothingAlpha(sharpness, dt)
+	end
+	LimbIK.blend(right, rightGoal, alphaFor(rightGoal, right))
+	LimbIK.blend(left, leftGoal, alphaFor(leftGoal, left))
 end
 
 function ArmController.start()
