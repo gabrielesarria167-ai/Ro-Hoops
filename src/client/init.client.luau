@@ -1,4 +1,17 @@
 --!strict
+-- CLIENT ENTRY POINT
+-- Rojo turns this file into StarterPlayerScripts.Client, a LocalScript that runs on each
+-- player's computer. The other files in src/client/ become ModuleScripts inside it.
+--
+-- Where to look for what:
+--   Controllers/InputController     reads WASD / arrows / Shift
+--   Controllers/MovementController  acceleration, speed, shot drift
+--   Controllers/CameraController    the fixed rim-facing camera
+--   Controllers/BallController      dribble, shot flight, make/miss detection
+--   Controllers/ShotController      the E key: shot type, timing, aim
+--   Controllers/HudController       timing meter, callouts, stats panel
+-- All the numbers they use live in src/shared/Config/.
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tunable = require(ReplicatedStorage.Shared.Tunable)
@@ -11,12 +24,14 @@ local InputController = require(Controllers.InputController)
 local MovementController = require(Controllers.MovementController)
 local ShotController = require(Controllers.ShotController)
 
+-- In Studio, expose these configs under ReplicatedStorage.Tuning for live editing.
 local Config = ReplicatedStorage.Shared.Config
 Tunable.bind("Movement", require(Config.Movement))
 Tunable.bind("Camera", require(Config.Camera))
 Tunable.bind("Shooting", require(Config.Shooting))
 Tunable.bind("Ball", require(Config.Ball))
 
+-- Start order matters: character tracking first, then input before the systems that read it.
 CharacterRef.start()
 InputController.start()
 MovementController.start()

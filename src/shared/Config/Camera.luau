@@ -1,15 +1,35 @@
 --!strict
--- Fixed, rim-focused camera. The camera sits behind the player on the court's long axis
--- and looks at a point between the player and the rim; it never takes rotation input.
+-- CAMERA SETTINGS
+-- The camera is fixed and rim-focused: it sits behind the player (on the side away from
+-- the rim), looks at a point between the player and the rim, and never takes rotation
+-- input. Used by src/client/Controllers/CameraController.luau.
+--
+-- Units: studs. Live-tunable in Studio under ReplicatedStorage > Tuning > Camera.
 
 local Camera = {
+	-- How wide the camera sees, in degrees. Higher = more zoomed out / more distortion.
 	FIELD_OF_VIEW = 60,
-	HEIGHT = 10, -- studs above the floor
-	DISTANCE = 15, -- studs behind the player (away from the rim)
-	MIN_PLAYER_Z = 3, -- stops the camera sliding under the backboard when the player is behind the rim
-	LATERAL_FOLLOW = 0.55, -- 0 = camera stays centered on the rim, 1 = fully follows the player sideways
-	LOOK_BLEND = 0.4, -- 0 = look at the player, 1 = look at the rim
-	FOLLOW_SHARPNESS = 8, -- higher = camera catches up faster
+
+	-- Camera height above the floor, studs. Higher = more top-down view.
+	HEIGHT = 10,
+
+	-- How far behind the player the camera sits, studs. Higher = player looks smaller.
+	DISTANCE = 15,
+
+	-- If the player walks behind the rim, the camera pretends they're at least this far in
+	-- front of it, so the camera never slides under the backboard.
+	MIN_PLAYER_Z = 3,
+
+	-- How much the camera slides sideways with the player.
+	-- 0 = camera stays centred on the rim, 1 = camera stays directly behind the player.
+	LATERAL_FOLLOW = 0.55,
+
+	-- Where the camera points, between the player and the rim.
+	-- 0 = looks straight at the player, 1 = looks straight at the rim.
+	LOOK_BLEND = 0.4,
+
+	-- How quickly the camera catches up with the player. Higher = snappier, lower = floatier.
+	FOLLOW_SHARPNESS = 8,
 }
 
 return Camera
