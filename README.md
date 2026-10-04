@@ -4,6 +4,8 @@ A skill-focused Roblox basketball game: simple controls, difficult execution.
 
 The current build is a movement and shooting test on a single hoop: a plain floor, a backboard and a rim.
 
+The full design (concept, mechanics and the phased build order) is in [docs/GAME_PLAN.md](docs/GAME_PLAN.md).
+
 ## Setup
 
 Tools are pinned with [Rokit](https://github.com/rojo-rbx/rokit) in `rokit.toml` (Rojo, Selene, StyLua, Lune).
