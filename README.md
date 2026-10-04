@@ -25,6 +25,7 @@ Start from the built place rather than a Studio template, so there's no Baseplat
 | `W A S D` / arrows | Move (relative to the screen, so up is always toward the rim) |
 | `Shift` | Run |
 | `E` (hold, release) | Shoot / finish. Release when the meter reaches the white tick |
+| Mouse / trackpad flick | Dribble move. Flick toward the empty hand to cross over (no button needed; slow cursor movement does nothing) |
 
 What `E` does depends on where you are and how you're moving when you press it:
 
@@ -49,9 +50,10 @@ In Studio, every number and position in `Config/Movement`, `Config/Camera`, `Con
 ```
 src/
   shared/              -> ReplicatedStorage.Shared
-    Config/            tuning values (Court, Movement, Camera, Shooting, Ball, Motion)
+    Config/            tuning values (Court, Movement, Camera, Shooting, Ball, Motion, Skills)
     MovementMath.luau  pure acceleration / smoothing math
     ShotMath.luau      pure shot type, timing grade, aim error and arc math
+    SkillMath.luau     pure flick detection and dribble-move choice
     Tunable.luau       Studio-only live tuning
   server/              -> ServerScriptService.Server
     HoopBuilder.luau   floor, backboard, rim, spawn
@@ -59,7 +61,7 @@ src/
   client/              -> StarterPlayerScripts.Client
     CharacterRef.luau  current character tracking
     LimbIK.luau        shared arm/leg IK helper (hands on the ball, planted feet)
-    Controllers/       Input, Movement, Camera, Ball, Arm, Leg, Posture, Shot, Hud
+    Controllers/       Input, Movement, Camera, Ball, Arm, Leg, Posture, Shot, Skill, Hud
 tests/                 Lune specs for the pure modules
 ```
 

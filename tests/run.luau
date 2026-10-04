@@ -4,5 +4,6 @@ local t = require("./harness")
 
 require("./MovementMath.spec")
 require("./ShotMath.spec")
+require("./SkillMath.spec")
 
 t.finish()

@@ -25,8 +25,11 @@ local MovementController = {}
 local velocity = Vector3.zero
 -- When set, input is ignored and the player's velocity eases toward this one (at
 -- Motion.DRIFT_BLEND_RATE, so momentum carries into the shot). Used by ShotController for
--- shot drift (pull-up stops, fadeaways, layup drives). nil = normal control.
+-- shot drift (pull-up stops, fadeaways, layup drives) and by SkillController for the
+-- crossover's jab and burst. nil = normal control.
 local override: Vector3? = nil
+-- How fast the velocity eases toward `override`, studs/s² (nil = Motion.DRIFT_BLEND_RATE).
+local overrideRate: number? = nil
 
 -- Returns the screen's "up" and "right" directions flattened onto the floor, so key
 -- presses map to on-screen directions no matter where the camera is.
@@ -51,7 +54,7 @@ local function step(dt: number)
 
 	local forcedVelocity = override
 	if forcedVelocity then
-		local rate = Motion.DRIFT_BLEND_RATE -- same rate whether speeding up, slowing or turning
+		local rate = overrideRate or Motion.DRIFT_BLEND_RATE -- same rate whether speeding up, slowing or turning
 		local vx, vz =
 			MovementMath.stepVelocity(velocity.X, velocity.Z, forcedVelocity.X, forcedVelocity.Z, rate, rate, rate, dt)
 		velocity = Vector3.new(vx, 0, vz)
@@ -83,21 +86,29 @@ local function step(dt: number)
 	end
 end
 
+-- The screen's "up" and "right" directions flattened onto the floor (world space). Used
+-- by SkillController to turn a mouse flick on screen into a direction on the court.
+function MovementController.getScreenAxes(): (Vector3, Vector3)
+	return screenAxes()
+end
+
 -- The player's current flat velocity, studs/s.
 function MovementController.getVelocity(): Vector3
 	return velocity
 end
 
--- Ignores input and eases the player toward `forcedVelocity`. Pass nil to give control
--- back to the player.
-function MovementController.setOverride(forcedVelocity: Vector3?)
+-- Ignores input and eases the player toward `forcedVelocity`, changing speed at `rate`
+-- studs/s² (default Motion.DRIFT_BLEND_RATE). Pass nil to give control back to the player.
+function MovementController.setOverride(forcedVelocity: Vector3?, rate: number?)
 	override = forcedVelocity
+	overrideRate = rate
 end
 
 function MovementController.start()
 	CharacterRef.onSpawn(function()
 		velocity = Vector3.zero
 		override = nil
+		overrideRate = nil
 	end)
 	-- "Input + 1" priority runs right after Roblox reads input, before the camera moves.
 	RunService:BindToRenderStep("RoHoopsMovement", Enum.RenderPriority.Input.Value + 1, step)

@@ -5,8 +5,11 @@
 -- it faces and where the fingers point, and the arm bends (and the wrist turns) to match,
 -- on top of the normal animations.
 --
---   Dribble – the right palm rides on top of the ball and waits at waist height while the
---             ball bounces down and back up.
+--   Dribble – the dribbling hand (right or left) rides on top of the ball and waits at
+--             waist height while it bounces down and back up. In a hand move (H switch
+--             or crossover) the other hand waits where it will catch the ball, and the
+--             hand that let go relaxes. In the wide crossover the palm holds the ball's
+--             outer side instead of its top.
 --   Held    – shooting hand behind the ball in the dip, sliding under it as it rises to the
 --             release point above the head; guide hand on the side the whole way.
 --   Flight  – both arms reach up and forward toward the rim with the shooting wrist
@@ -27,6 +30,7 @@ local RunService = game:GetService("RunService")
 
 local Ball = require(ReplicatedStorage.Shared.Config.Ball)
 local Motion = require(ReplicatedStorage.Shared.Config.Motion)
+local Skills = require(ReplicatedStorage.Shared.Config.Skills)
 local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
 local LimbIK = require(script.Parent.Parent.LimbIK)
@@ -151,18 +155,46 @@ local function update(dt: number)
 	local rightGoal, leftGoal = 0, 0 -- how much each arm should follow its target this frame
 
 	if mode == "Dribble" then
-		-- Palm on top of the ball (facing down), but never lower than DRIBBLE_PALM_MIN_HEIGHT.
+		-- Puts `side`'s palm on a ball at `at`. `grip` says where on the ball:
+		--   0 = on top, facing down (a dribble), never lower than DRIBBLE_PALM_MIN_HEIGHT so
+		--       the hand waits there while the ball bounces down and back up;
+		--   1 = on the ball's outer side (Skills.WIDE_GRIP), for pulling it wide and
+		--       whipping it across in the crossover.
+		-- In between blends the two. The left hand mirrors the right (elbow out to the left).
 		local floorY = rootCFrame.Position.Y - parts.humanoid.HipHeight - parts.root.Size.Y / 2
-		local palmY = math.max(ballPosition.Y + Ball.RADIUS + Motion.PALM_GAP, floorY + Motion.DRIBBLE_PALM_MIN_HEIGHT)
-		local palm = Vector3.new(ballPosition.X, palmY, ballPosition.Z)
-		LimbIK.placeHand(
-			right,
-			palm,
-			-Vector3.yAxis,
-			rootCFrame:VectorToWorldSpace(toObjectSpace(Motion.DRIBBLE_FINGERS))
-		)
-		right.pole.WorldPosition = fromHips(rootCFrame, Motion.DRIBBLE_ELBOW)
-		rightGoal = 1
+		local function handOnBall(side: string, at: Vector3, grip: number)
+			local arm = if side == "Right" then right else left
+			local sideSign = if side == "Right" then 1 else -1
+			local wide = Skills.WIDE_GRIP
+			local spot = Vector3.new(0, 1, 0):Lerp(Vector3.new(wide.X * sideSign, wide.Y, wide.Z), grip)
+			local direction = rootCFrame:VectorToWorldSpace(toObjectSpace(spot)).Unit
+			local palm = at + direction * (Ball.RADIUS + Motion.PALM_GAP)
+			local minY = floorY + Motion.DRIBBLE_PALM_MIN_HEIGHT * (1 - grip)
+			LimbIK.placeHand(
+				arm,
+				Vector3.new(palm.X, math.max(palm.Y, minY), palm.Z),
+				-direction,
+				rootCFrame:VectorToWorldSpace(toObjectSpace(Motion.DRIBBLE_FINGERS))
+			)
+			local elbow = Motion.DRIBBLE_ELBOW
+			arm.pole.WorldPosition = fromHips(rootCFrame, Vector3.new(elbow.X * sideSign, elbow.Y, elbow.Z))
+			if side == "Right" then
+				rightGoal = 1
+			else
+				leftGoal = 1
+			end
+		end
+
+		-- The hand on the ball follows it; in a hand move the other hand is already waiting
+		-- where it will catch the ball, and the ball arrives into it. While the ball bounces
+		-- between hands, the hand that let go relaxes back to the normal animation.
+		local handling = BallController.getHandling()
+		if handling.holder then
+			handOnBall(handling.holder, ballPosition, handling.grip)
+		end
+		if handling.waiting and handling.waitPoint then
+			handOnBall(handling.waiting, handling.waitPoint, handling.grip)
+		end
 	elseif mode == "Held" then
 		-- How far the ball has risen from the pocket (0) to the release point (1). The
 		-- shooting hand turns from its LOW spot to its HIGH spot over that range.

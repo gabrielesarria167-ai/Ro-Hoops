@@ -12,6 +12,7 @@
 --   Controllers/LegController       the knee dip and straight legs in the air (leg IK)
 --   Controllers/PostureController   upright torso and eyes on the rim during a shot
 --   Controllers/ShotController      the E key: shot type, timing, aim
+--   Controllers/SkillController     mouse/trackpad flicks → dribble moves (crossover)
 --   Controllers/HudController       timing meter, callouts, stats panel
 -- All the numbers they use live in src/shared/Config/.
 
@@ -29,6 +30,7 @@ local InputController = require(Controllers.InputController)
 local MovementController = require(Controllers.MovementController)
 local PostureController = require(Controllers.PostureController)
 local ShotController = require(Controllers.ShotController)
+local SkillController = require(Controllers.SkillController)
 
 -- In Studio, expose these configs under ReplicatedStorage.Tuning for live editing.
 local Config = ReplicatedStorage.Shared.Config
@@ -37,6 +39,7 @@ Tunable.bind("Camera", require(Config.Camera))
 Tunable.bind("Shooting", require(Config.Shooting))
 Tunable.bind("Ball", require(Config.Ball))
 Tunable.bind("Motion", require(Config.Motion))
+Tunable.bind("Skills", require(Config.Skills))
 
 -- Start order matters: character tracking first, then input before the systems that read it.
 CharacterRef.start()
@@ -49,3 +52,4 @@ LegController.start()
 PostureController.start()
 HudController.start()
 ShotController.start()
+SkillController.start()

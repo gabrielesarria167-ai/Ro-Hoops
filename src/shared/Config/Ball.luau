@@ -39,6 +39,23 @@ local Ball = {
 	DRIBBLE_RATE_PER_SPEED = 0.05, -- extra bounces per second for each stud/s you're moving
 	DRIBBLE_SIDE = 1.3, -- how far to the player's right the ball bounces, studs
 	DRIBBLE_FORWARD = 0.9, -- how far in front of the player the ball bounces, studs
+	-- (DRIBBLE_SIDE is mirrored to the left when the ball is in the left hand.)
+
+	-- HAND SWITCH (the H key) ----------------------------------------------------------
+	-- A quick, simple change of hands: the ball is pushed down and across in front of the
+	-- body, hits the floor on the centre line, and rises into the other hand at the top of
+	-- its bounce. (The wide Iverson crossover is in Config/Skills.luau.)
+
+	-- Seconds from the key press until the ball is at the top of the bounce in the other
+	-- hand (when the ball starts from the top of a bounce). Lower = snappier.
+	SWITCH_TIME = 0.26,
+	-- Fraction of SWITCH_TIME spent driving the ball down to the floor; the rest is the
+	-- rise into the other hand. If the ball is already low when you press H, the push down
+	-- is shorter, so the switch always starts instantly.
+	SWITCH_DOWN_SHARE = 0.45,
+	-- Where the ball hits the floor as it crosses: this many studs in front of the hips, on
+	-- the centre line. Far enough forward that it doesn't pass through the feet.
+	SWITCH_FORWARD = 1.2,
 
 	-- SHOT RESOLUTION -------------------------------------------------------------------
 
