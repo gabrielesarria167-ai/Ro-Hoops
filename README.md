@@ -25,7 +25,12 @@ Start from the built place rather than a Studio template, so there's no Baseplat
 | `W A S D` / arrows | Move (relative to the screen, so up is always toward the rim) |
 | `Shift` | Run |
 | `E` (hold, release) | Shoot / finish. Release when the meter reaches the white tick |
-| Mouse / trackpad flick | Dribble move. Flick toward the empty hand to cross over (no button needed; slow cursor movement does nothing) |
+| `H` | Quick hand switch |
+| Flick toward the empty hand | Wide (Iverson-style) crossover |
+| Flick backward | Step-back |
+| Draw a circle | 360 spin (reverse pivot), switching hands during the spin (clockwise circle = clockwise spin) |
+
+Mouse/trackpad moves need no button: flick or circle quickly; slow cursor movement does nothing. Each move takes at most one short step.
 
 What `E` does depends on where you are and how you're moving when you press it:
 

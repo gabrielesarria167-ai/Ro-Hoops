@@ -6,7 +6,7 @@
 -- on top of the normal animations.
 --
 --   Dribble – the dribbling hand (right or left) rides on top of the ball and waits at
---             waist height while it bounces down and back up. In a hand move (H switch
+--             waist height while it bounces down and back up. In a dribble move (H switch
 --             or crossover) the other hand waits where it will catch the ball, and the
 --             hand that let go relaxes. In the wide crossover the palm holds the ball's
 --             outer side instead of its top.

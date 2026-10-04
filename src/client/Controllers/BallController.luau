@@ -2,14 +2,21 @@
 -- BALL CONTROLLER
 -- Owns the test ball and decides makes and misses. The ball is in one of three modes:
 --   Dribble – bouncing beside the player (positioned by code, not physics), in the right
---             or left hand. A hand move (BallController.switchHands, started by
---             SkillController) carries it to the other hand along a few waypoints:
---               HandSwitch (H key)  – down and across, one bounce on the centre line, up
---                                     into the other hand;
---               Crossover (flick)   – the wide Iverson crossover: out wide on its side
---                                     (the sell), pounded down to a low bounce on the
---                                     centre line, caught wide and low on the other side,
---                                     then back up into a normal dribble.
+--             or left hand. A dribble move (BallController.startMove, started by
+--             SkillController) carries it along a few waypoints:
+--               HandSwitch (H key)   – down and across, one bounce on the centre line, up
+--                                      into the other hand;
+--               Crossover (flick)    – the wide Iverson crossover: out wide on its side
+--                                      (the sell), pounded down to a low bounce on the
+--                                      centre line, caught wide and low on the other
+--                                      side, then back up into a normal dribble;
+--               StepBack (flick back) – pulled back to a bounce just in front of the
+--                                      hips, up into the same hand;
+--               Spin (circle)        – pulled tight to the hip, then, while the body
+--                                      turns, pulled across the front of the body and
+--                                      handed to the other hand partway round, which
+--                                      pushes it into the dribble (the path is measured
+--                                      from the hips, so the ball goes round with them).
 --   Held    – the shooting motion while E is held: into the dip, then up to the release point
 --             (a jump shot rises past the face to above the head; a layup is carried up
 --             the right side to a high release in front)
@@ -52,7 +59,7 @@ type Flight = {
 	onResolved: (made: boolean) -> (), -- called once with the result (ShotController updates the HUD)
 }
 
--- One stop on a hand move's path. The ball travels from the previous stop to `spot`.
+-- One stop on a dribble move's path. The ball travels from the previous stop to `spot`.
 type Waypoint = {
 	-- Where the ball arrives: (out, height, forward). `out` = studs toward the hand the
 	-- ball STARTED in (negative = toward the new hand), height = studs above the floor,
@@ -69,21 +76,22 @@ type Waypoint = {
 	grip: Vector2,
 }
 
--- A hand move in progress: the ball's trip from one hand to the other.
+-- A dribble move in progress: the ball's trip from its hand to the hand it ends in (the
+-- same hand for a step-back).
 type HandMove = {
 	move: SkillMath.Move, -- which move
 	from: Vector3, -- where the ball was when the move started, relative to the hips
 	fromHand: SkillMath.Hand, -- the hand it started in
-	toHand: SkillMath.Hand, -- the hand it's going to
+	toHand: SkillMath.Hand, -- the hand it ends in
 	startedAt: number, -- clock time the move started
 	path: { Waypoint },
-	catchAt: number, -- index of the waypoint where the new hand catches the ball
+	catchAt: number, -- index of the waypoint where the new hand catches the ball (0 = same hand)
 }
 
 -- What the hands should be doing this frame (for ArmController).
 export type Handling = {
 	holder: SkillMath.Hand?, -- the hand on the ball (nil while it bounces between hands)
-	waiting: SkillMath.Hand?, -- the hand waiting to catch it (nil when there's no hand move)
+	waiting: SkillMath.Hand?, -- the hand waiting to catch it (nil when there's no dribble move)
 	waitPoint: Vector3?, -- where that hand waits: where the ball will arrive (world space)
 	grip: number, -- 0 = palm on top of the ball (dribble), 1 = palm on its outer side
 }
@@ -96,9 +104,9 @@ local dribblePhase = 0 -- 0 to 1 through the current bounce: 0 and 1 = on the fl
 local flight: Flight? = nil -- the shot in the air, or nil
 local launchedAt = 0 -- clock time of the last release (ArmController times the follow-through from it)
 
--- Dribbling hand and hand moves.
-local hand: SkillMath.Hand = "Right" -- the hand dribbling the ball; switches at the end of a hand move
-local handMove: HandMove? = nil -- the hand move in progress, or nil
+-- Dribbling hand and dribble moves.
+local hand: SkillMath.Hand = "Right" -- the hand dribbling the ball; switches at the end of a dribble move
+local handMove: HandMove? = nil -- the dribble move in progress, or nil
 -- What the hands should do this frame; updated every frame, read by ArmController.
 local handling: Handling = { holder = "Right", grip = 0 }
 
@@ -246,7 +254,7 @@ local function spotToLocal(spot: Vector3, fromSign: number, floor: number): Vect
 	return Vector3.new(spot.X * fromSign, floor + spot.Y, -spot.Z)
 end
 
--- Where the ball is during a hand move (world space), or nil once it has finished. Also
+-- Where the ball is during a dribble move (world space), or nil once it has finished. Also
 -- fills in `handling` for ArmController.
 local function handMovePosition(current: HandMove, rootCFrame: CFrame, floorY: number): Vector3?
 	local fromSign = if current.fromHand == "Right" then 1 else -1
@@ -278,7 +286,7 @@ local function handMovePosition(current: HandMove, rootCFrame: CFrame, floorY: n
 	return nil
 end
 
--- Stops any hand move. The ball belongs to the hand it was heading to.
+-- Stops any dribble move. The ball belongs to the hand it was heading to.
 local function endHandMove()
 	local current = handMove
 	if current then
@@ -315,7 +323,7 @@ local function update(dt: number)
 			ball.CFrame = CFrame.new(position)
 			return
 		end
-		-- Hand move finished: the ball is at the top of its bounce in the other hand, so
+		-- Dribble move finished: the ball is at the top of its bounce in its (new) hand, so
 		-- carry on dribbling from the top (dribblePhase 0.5).
 		endHandMove()
 		dribblePhase = 0.5
@@ -397,7 +405,7 @@ function BallController.getLaunchTime(): number
 	return launchedAt
 end
 
--- The hand dribbling the ball: "Right" or "Left". During a hand move it's still the hand
+-- The hand dribbling the ball: "Right" or "Left". During a dribble move it's still the hand
 -- the ball started in, until the move ends.
 function BallController.getHand(): SkillMath.Hand
 	return hand
@@ -409,17 +417,85 @@ function BallController.getHandling(): Handling
 	return handling
 end
 
--- True while a hand move (hand switch or crossover) is in progress.
-function BallController.isSwitching(): boolean
+-- True while a dribble move (hand switch, crossover, step-back, spin) is in progress.
+function BallController.isMoving(): boolean
 	return handMove ~= nil
 end
 
--- The path of each hand move, as a list of waypoints (see the Waypoint type).
--- `height` = how high the ball is in its bounce when the move starts (0 = floor, 1 = top).
+-- The path of each dribble move, as a list of waypoints (see the Waypoint type), plus the
+-- index of the waypoint where the other hand catches the ball (0 = it stays in the same
+-- hand). `height` = how high the ball is in its bounce when the move starts (0 = floor,
+-- 1 = top).
 local function buildPath(move: SkillMath.Move, height: number): ({ Waypoint }, number)
 	local top = Ball.RADIUS + Ball.DRIBBLE_HEIGHT -- ball height at the top of a dribble
-	-- The top of a dribble in the new hand (the move always ends there).
+	-- Every move ends at the top of a normal dribble, in the new hand or the same one.
 	local newHandTop = Vector3.new(-Ball.DRIBBLE_SIDE, top, Ball.DRIBBLE_FORWARD)
+	local sameHandTop = Vector3.new(Ball.DRIBBLE_SIDE, top, Ball.DRIBBLE_FORWARD)
+	if move == "StepBack" then
+		-- Pulled back with the body: down to a bounce just in front of the hips, then up.
+		return {
+			{
+				spot = Vector3.new(Ball.DRIBBLE_SIDE, Ball.RADIUS, Skills.STEPBACK_BOUNCE_FORWARD),
+				duration = Skills.STEPBACK_PULL_TIME,
+				ease = easeIn,
+				holder = "From",
+				grip = Vector2.zero,
+			},
+			{
+				spot = sameHandTop,
+				duration = Skills.STEPBACK_RISE_TIME,
+				ease = easeOut,
+				holder = "From",
+				grip = Vector2.zero,
+			},
+		},
+			0
+	elseif move == "Spin" then
+		-- A reverse-pivot spin. Everything is measured from the hips, so while the body
+		-- turns the ball goes round with it; the path below is what it does relative to
+		-- the body: pulled across the front, handed over partway round, pushed into the
+		-- dribble by the new hand.
+		local pocket = Skills.SPIN_POCKET
+		local handoff = math.clamp(Skills.SPIN_HANDOFF_AT, 0.05, 0.95)
+		return {
+			{ -- 1. pulled in to its hip, palm sliding round to the ball's outer side
+				spot = pocket,
+				duration = Skills.SPIN_GATHER_TIME,
+				ease = ease,
+				holder = "From",
+				grip = Vector2.new(0, 1),
+			},
+			{ -- 2. turning: pulled across the front of the body to where the hands meet
+				spot = Skills.SPIN_HANDOFF_SPOT,
+				duration = Skills.SPIN_TIME * handoff,
+				ease = linear,
+				holder = "From",
+				grip = Vector2.new(1, 1),
+			},
+			{ -- 3. still turning: the other hand takes it on to its own hip
+				spot = Vector3.new(-pocket.X, pocket.Y, pocket.Z),
+				duration = Skills.SPIN_TIME * (1 - handoff),
+				ease = linear,
+				holder = "To",
+				grip = Vector2.new(1, 1),
+			},
+			{ -- 4. coming out of the spin: pushed down to a bounce beside the new hand
+				spot = Vector3.new(-Ball.DRIBBLE_SIDE, Ball.RADIUS, Skills.SPIN_BOUNCE_FORWARD),
+				duration = Skills.SPIN_DROP_TIME,
+				ease = easeIn,
+				holder = "To",
+				grip = Vector2.new(1, 0),
+			},
+			{ -- 5. back up into that hand
+				spot = newHandTop,
+				duration = Skills.SPIN_RISE_TIME,
+				ease = easeOut,
+				holder = "To",
+				grip = Vector2.zero,
+			},
+		},
+			2 -- the other hand waits at the handoff spot and takes the ball there
+	end
 	if move == "Crossover" then
 		-- The wide Iverson crossover (all values in Config/Skills.luau).
 		local sell, catch = Skills.WIDE_SELL_SPOT, Skills.WIDE_CATCH_SPOT
@@ -476,9 +552,9 @@ local function buildPath(move: SkillMath.Move, height: number): ({ Waypoint }, n
 		2
 end
 
--- Starts a hand move ("HandSwitch" or "Crossover") to the other hand. Returns false (and
--- does nothing) unless the player is dribbling and not already mid-move.
-function BallController.switchHands(move: SkillMath.Move): boolean
+-- Starts a dribble move ("HandSwitch", "Crossover", "StepBack" or "Spin"). Returns false
+-- (and does nothing) unless the player is dribbling and not already mid-move.
+function BallController.startMove(move: SkillMath.Move): boolean
 	local parts = CharacterRef.get()
 	if mode ~= "Dribble" or handMove or not parts then
 		return false
@@ -486,11 +562,12 @@ function BallController.switchHands(move: SkillMath.Move): boolean
 	local floorY = floorHeight(parts)
 	local height = math.clamp((ball.Position.Y - floorY - Ball.RADIUS) / math.max(Ball.DRIBBLE_HEIGHT, 0.01), 0, 1)
 	local path, catchAt = buildPath(move, height)
+	local otherHand: SkillMath.Hand = if hand == "Right" then "Left" else "Right"
 	handMove = {
 		move = move,
 		from = parts.root.CFrame:PointToObjectSpace(ball.Position),
 		fromHand = hand,
-		toHand = if hand == "Right" then "Left" else "Right",
+		toHand = if catchAt > 0 then otherHand else hand,
 		startedAt = os.clock(),
 		path = path,
 		catchAt = catchAt,
@@ -521,7 +598,7 @@ function BallController.hold(toPocket: number, toRelease: number, motionStyle: S
 		return
 	end
 	style = motionStyle
-	endHandMove() -- shooting out of a hand move: the gather starts from wherever the ball is
+	endHandMove() -- shooting out of a dribble move: the gather starts from wherever the ball is
 	local parts = CharacterRef.get()
 	if parts then
 		gatherFrom = PostureController.getBodyCFrame(parts.root.CFrame):PointToObjectSpace(ball.Position)
