@@ -40,14 +40,14 @@ Early releases fall short and late ones go long. Perfect releases (inside the gr
 
 ## Live tuning
 
-In Studio, every number in `Config/Movement`, `Config/Camera`, `Config/Shooting` and `Config/Ball` appears as an attribute under `ReplicatedStorage > Tuning` while playing; switch the Explorer to the **client** view to edit them. Changes apply immediately but aren't saved, so copy values you like back into the config files. `Workspace.Gravity` (55) controls both jump height and ball flight.
+In Studio, every number and position in `Config/Movement`, `Config/Camera`, `Config/Shooting`, `Config/Ball` and `Config/Motion` appears as an attribute under `ReplicatedStorage > Tuning` while playing; switch the Explorer to the **client** view to edit them. Changes apply immediately but aren't saved, so copy values you like back into the config files. `Workspace.Gravity` (55) controls both jump height and ball flight.
 
 ## Layout
 
 ```
 src/
   shared/              -> ReplicatedStorage.Shared
-    Config/            tuning values (Court, Movement, Camera, Shooting, Ball)
+    Config/            tuning values (Court, Movement, Camera, Shooting, Ball, Motion)
     MovementMath.luau  pure acceleration / smoothing math
     ShotMath.luau      pure shot type, timing grade, aim error and arc math
     Tunable.luau       Studio-only live tuning
@@ -56,7 +56,7 @@ src/
     CollisionGroups.luau
   client/              -> StarterPlayerScripts.Client
     CharacterRef.luau  current character tracking
-    Controllers/       Input, Movement, Camera, Ball, Shot, Hud
+    Controllers/       Input, Movement, Camera, Ball, Arm, Shot, Hud
 tests/                 Lune specs for the pure modules
 ```
 

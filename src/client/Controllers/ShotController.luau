@@ -3,18 +3,23 @@
 -- Pressing E:
 --   1. picks the shot type from your position and movement (ShotMath.classify):
 --      jump shot, pull-up, fadeaway, step-back, side shot, layup or close shot,
---   2. jumps you into the air with that shot's drift and starts the timing meter.
+--   2. starts the timing meter, eases your momentum into the shot's drift, turns you
+--      smoothly to face the rim, and starts the ball rising (BallController.hold),
+--   3. jumps a moment later, timed so you're at the top of the jump at the perfect release.
 -- Releasing E:
---   3. grades the timing (ShotMath.grade) and turns it into an aim error (ShotMath.aimError),
---   4. solves the arc to that target (ShotMath.launchVelocity) and launches the ball.
--- Tuning values: src/shared/Config/Shooting.luau.
+--   4. grades the timing (ShotMath.grade) and turns it into an aim error (ShotMath.aimError),
+--   5. solves the arc to that target (ShotMath.launchVelocity) and launches the ball.
+-- Tuning values: src/shared/Config/Shooting.luau (timing, aim, shot types) and
+-- src/shared/Config/Motion.luau (turn speed, jump timing, drift blending).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Court = require(ReplicatedStorage.Shared.Config.Court)
+local Motion = require(ReplicatedStorage.Shared.Config.Motion)
 local Shooting = require(ReplicatedStorage.Shared.Config.Shooting)
+local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
 local ShotMath = require(ReplicatedStorage.Shared.ShotMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
 local BallController = require(script.Parent.BallController)
@@ -31,6 +36,8 @@ type Phase = "Ready" | "Gathering" | "Airborne"
 type ActiveShot = {
 	config: Shooting.ShotTypeConfig, -- the settings of the chosen shot type
 	startedAt: number, -- clock time when E was pressed, seconds
+	jumpAt: number, -- clock time when the jump should happen
+	jumpedAt: number?, -- clock time when the jump actually happened (nil = still on the ground)
 }
 
 local SHOOT_KEY = Enum.KeyCode.E -- change this to rebind shooting
@@ -52,7 +59,22 @@ local function rimAxes(position: Vector3): (number, Vector3, Vector3)
 	return distance, toward, toward:Cross(Vector3.yAxis)
 end
 
--- E pressed: choose the shot, jump, start the meter.
+-- Leaves the ground with the shot type's jump power.
+local function jump(humanoid: Humanoid, config: Shooting.ShotTypeConfig)
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = config.JUMP_POWER
+	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+end
+
+-- Turns the body a little further toward the rim (called every frame during a shot).
+local function turnTowardRim(root: BasePart, dt: number)
+	local _, toward = rimAxes(root.Position)
+	local facingRim = CFrame.lookAt(root.Position, root.Position + toward)
+	local alpha = MovementMath.smoothingAlpha(Motion.TURN_SHARPNESS, dt)
+	root.CFrame = root.CFrame:Lerp(facingRim, alpha)
+end
+
+-- E pressed: choose the shot, start the meter and the gather; the jump follows shortly.
 local function begin()
 	if phase ~= "Ready" or not BallController.hasBall() then
 		return
@@ -89,15 +111,19 @@ local function begin()
 	end
 	MovementController.setOverride(drift)
 
-	-- Face the rim and jump.
-	humanoid.AutoRotate = false -- stop the Humanoid turning toward its movement direction
-	root.CFrame = CFrame.lookAt(root.Position, root.Position + toward)
-	humanoid.UseJumpPower = true
-	humanoid.JumpPower = config.JUMP_POWER
-	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	-- From here on we turn the body ourselves (turnTowardRim), so stop the Humanoid
+	-- turning toward its movement direction.
+	humanoid.AutoRotate = false
 
-	BallController.hold()
-	shot = { config = config, startedAt = os.clock() }
+	-- Time the jump so its peak lands on the perfect release. Jump power p reaches its peak
+	-- after p / gravity seconds; wait the difference (never longer than MAX_JUMP_DELAY).
+	local now = os.clock()
+	local idealReleaseTime = config.FILL_TIME * Shooting.IDEAL_RELEASE
+	local timeToPeak = config.JUMP_POWER / workspace.Gravity
+	local jumpDelay = math.clamp(idealReleaseTime - timeToPeak, 0, Motion.MAX_JUMP_DELAY)
+
+	BallController.hold(idealReleaseTime) -- ball reaches the set point at the perfect moment
+	shot = { config = config, startedAt = now, jumpAt = now + jumpDelay, jumpedAt = nil }
 	phase = "Gathering"
 	HudController.beginShot(config.LABEL)
 end
@@ -121,7 +147,10 @@ local function release()
 	local difficulty = ShotMath.difficulty(config.DIFFICULTY, distanceFeet, Shooting)
 	local depthError, lateralError =
 		ShotMath.aimError(offset, difficulty, Shooting, random:NextNumber(), random:NextNumber())
-	local target = Court.RIM_POSITION + toward * depthError + lateral * lateralError
+	-- The errors are tuned for a real-size hoop; scale them with the oversized ball and rim
+	-- so shooting is exactly as hard as at real size.
+	local aimOffset = (toward * depthError + lateral * lateralError) * Court.EQUIPMENT_SCALE
+	local target = Court.RIM_POSITION + aimOffset
 
 	-- Solve the throw that lands exactly on that target, with a higher arc from further out.
 	local arcHeight = config.ARC_HEIGHT + distanceFeet * Shooting.ARC_PER_FT
@@ -146,11 +175,21 @@ local function land()
 	end
 end
 
--- Runs every frame: fills the meter while gathering, watches for landing after release.
-local function step()
+-- Runs every frame during a shot: turns toward the rim, jumps when it's time, fills the
+-- meter while gathering, and watches for landing after release.
+local function step(dt: number)
 	local activeShot = shot
-	if not activeShot then
+	local parts = CharacterRef.get()
+	if not activeShot or not parts then
 		return
+	end
+
+	turnTowardRim(parts.root, dt)
+
+	local now = os.clock()
+	if not activeShot.jumpedAt and now >= activeShot.jumpAt then
+		jump(parts.humanoid, activeShot.config)
+		activeShot.jumpedAt = now
 	end
 
 	if phase == "Gathering" then
@@ -161,9 +200,10 @@ local function step()
 			release()
 		end
 	elseif phase == "Airborne" then
-		local parts = CharacterRef.get()
-		local airTime = os.clock() - activeShot.startedAt
-		if parts and parts.humanoid.FloorMaterial ~= Enum.Material.Air and airTime > MIN_AIR_TIME then
+		-- Landed = we did jump, have been up for a moment, and are touching the floor again.
+		local jumpedAt = activeShot.jumpedAt
+		local grounded = parts.humanoid.FloorMaterial ~= Enum.Material.Air
+		if jumpedAt and now - jumpedAt > MIN_AIR_TIME and grounded then
 			land()
 		end
 	end

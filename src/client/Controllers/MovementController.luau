@@ -12,6 +12,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Motion = require(ReplicatedStorage.Shared.Config.Motion)
 local Movement = require(ReplicatedStorage.Shared.Config.Movement)
 local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
@@ -22,8 +23,9 @@ local MovementController = {}
 -- The player's current flat velocity (y is always 0), studs/s. Other systems read it
 -- through getVelocity(), e.g. to pick the shot type or speed up the dribble.
 local velocity = Vector3.zero
--- When set, input is ignored and the player moves at exactly this velocity. Used by
--- ShotController for in-air drift (fadeaways, layup drives). nil = normal control.
+-- When set, input is ignored and the player's velocity eases toward this one (at
+-- Motion.DRIFT_BLEND_RATE, so momentum carries into the shot). Used by ShotController for
+-- shot drift (pull-up stops, fadeaways, layup drives). nil = normal control.
 local override: Vector3? = nil
 
 -- Returns the screen's "up" and "right" directions flattened onto the floor, so key
@@ -49,7 +51,10 @@ local function step(dt: number)
 
 	local forcedVelocity = override
 	if forcedVelocity then
-		velocity = forcedVelocity
+		local rate = Motion.DRIFT_BLEND_RATE -- same rate whether speeding up, slowing or turning
+		local vx, vz =
+			MovementMath.stepVelocity(velocity.X, velocity.Z, forcedVelocity.X, forcedVelocity.Z, rate, rate, rate, dt)
+		velocity = Vector3.new(vx, 0, vz)
 	else
 		local intent = InputController.getMoveIntent() -- which keys are held
 		local speed = if InputController.isRunning() then Movement.RUN_SPEED else Movement.WALK_SPEED
@@ -83,7 +88,7 @@ function MovementController.getVelocity(): Vector3
 	return velocity
 end
 
--- Forces the player to move at `forcedVelocity`, ignoring input. Pass nil to give control
+-- Ignores input and eases the player toward `forcedVelocity`. Pass nil to give control
 -- back to the player.
 function MovementController.setOverride(forcedVelocity: Vector3?)
 	override = forcedVelocity

@@ -1,6 +1,6 @@
 --!strict
 -- LIVE TUNING (Studio only)
--- Copies every number and true/false value of a config table onto attributes of a folder
+-- Copies every number, true/false and Vector3 value of a config table onto attributes of a folder
 -- at ReplicatedStorage.Tuning.<name>, and copies your edits back into the table. Since
 -- the controllers read config values every frame, editing an attribute while playing
 -- changes the game immediately.
@@ -18,7 +18,7 @@ local Tunable = {}
 local function mirror(folder: Instance, config: any)
 	for key, value in config do
 		local kind = typeof(value) -- "number", "boolean", "table", "string", ...
-		if kind == "number" or kind == "boolean" then
+		if kind == "number" or kind == "boolean" or kind == "Vector3" then
 			folder:SetAttribute(key, value)
 			-- When you edit the attribute, write it back into the config table.
 			folder:GetAttributeChangedSignal(key):Connect(function()
@@ -33,7 +33,7 @@ local function mirror(folder: Instance, config: any)
 			mirror(child, value)
 			child.Parent = folder
 		end
-		-- Other kinds (strings, Vector3s, functions) are skipped.
+		-- Other kinds (strings, colours, functions) are skipped.
 	end
 end
 

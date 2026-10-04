@@ -47,8 +47,10 @@ local Shooting = {
 	-- AIM ERROR -------------------------------------------------------------------------
 	-- A mistimed release misses in a readable way: early = short, late = long.
 
-	-- Studs short/long the ball lands per unit of timing error (before difficulty).
-	DEPTH_ERROR_PER_TIMING = 1.6,
+	-- Studs short/long the ball lands per unit of timing error (before difficulty, and
+	-- before the Court.EQUIPMENT_SCALE scaling). At 3, GOOD releases still go in (often
+	-- off the rim) and EARLY / LATE releases land past the rim's edge and mostly miss.
+	DEPTH_ERROR_PER_TIMING = 3,
 	-- Max studs left/right per unit of timing error; the actual amount is random.
 	LATERAL_ERROR_PER_TIMING = 0.8,
 	-- Tiny random error on a perfect release, studs. Small enough to still go in.
@@ -71,7 +73,7 @@ local Shooting = {
 	-- Moving slower than this (studs/s) counts as standing still → Jump Shot.
 	STATIONARY_SPEED = 3,
 	-- A layup carries you toward the rim but stops you this many feet short of it.
-	LAYUP_STOP_FT = 3,
+	LAYUP_STOP_FT = 4,
 
 	-- SHOT TYPES ------------------------------------------------------------------------
 	-- One entry per shot. The key (e.g. JumpShot) must match a ShotType in ShotMath.luau.

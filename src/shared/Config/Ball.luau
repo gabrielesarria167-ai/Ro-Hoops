@@ -11,9 +11,10 @@ local Court = require(script.Parent.Court)
 local Ball = {
 	-- LOOK ------------------------------------------------------------------------------
 
-	-- Ball radius in studs. Court.ft converts real feet: 0.39 ft = a 9.4" diameter ball.
+	-- Ball radius in studs: a real 9.4" ball (0.39 ft radius) scaled up with the rim by
+	-- Court.EQUIPMENT_SCALE, so it's bigger than the avatar's hand (~1.25 studs across).
 	-- (Changing this live does not resize the ball; edit it here and restart Play.)
-	RADIUS = Court.ft(0.39),
+	RADIUS = Court.ft(0.39) * Court.EQUIPMENT_SCALE,
 	-- Ball colour (red, green, blue from 0 to 255).
 	COLOR = Color3.fromRGB(214, 110, 40),
 
@@ -33,22 +34,17 @@ local Ball = {
 
 	-- DRIBBLE (the fake dribble animation while you have the ball) ----------------------
 
-	DRIBBLE_HEIGHT = 2.3, -- how high the ball bounces above the floor, studs
+	DRIBBLE_HEIGHT = 2.1, -- how high the ball bounces above the floor, studs
 	DRIBBLE_RATE = 1.7, -- bounces per second while standing still
 	DRIBBLE_RATE_PER_SPEED = 0.05, -- extra bounces per second for each stud/s you're moving
-	DRIBBLE_SIDE = 1.1, -- how far to the player's right the ball bounces, studs
-	DRIBBLE_FORWARD = 0.7, -- how far in front of the player the ball bounces, studs
-
-	-- SHOT GATHER (where the ball sits while you hold E) --------------------------------
-
-	HOLD_HEIGHT = 2.6, -- studs above the character's hip (HumanoidRootPart) – roughly overhead
-	HOLD_FORWARD = 0.6, -- studs in front of the character
+	DRIBBLE_SIDE = 1.3, -- how far to the player's right the ball bounces, studs
+	DRIBBLE_FORWARD = 0.9, -- how far in front of the player the ball bounces, studs
 
 	-- SHOT RESOLUTION -------------------------------------------------------------------
 
 	-- Shots fly along a perfect scripted arc, then switch to real physics when the ball
 	-- gets this close to the rim (studs), so the rim and backboard decide close calls.
-	HANDOFF_DISTANCE = 2.5,
+	HANDOFF_DISTANCE = 3,
 	-- Once a falling ball is this many studs below the rim it can't go in: it's a miss.
 	MISS_DEPTH = 2,
 	-- A shot that hasn't gone in after this many seconds (e.g. stuck on the rim) is a miss.

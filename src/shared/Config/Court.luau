@@ -15,21 +15,31 @@ local function ft(feet: number): number
 	return feet * STUDS_PER_FOOT
 end
 
+-- Roblox avatars have huge hands and heads compared to a real person, so a true-to-scale
+-- ball looks smaller than the hand holding it. The ball and the rim are therefore scaled
+-- up together by this factor (heights and distances are not). Because the ball and rim
+-- grow together, shooting is exactly as hard as at real size: ShotController scales the
+-- aim error by the same factor.
+local EQUIPMENT_SCALE = 1.9
+
 local Court = {
 	STUDS_PER_FOOT = STUDS_PER_FOOT, -- exposed so other code can convert studs back to feet
 	ft = ft, -- exposed so other config files can use the same conversion
+	EQUIPMENT_SCALE = EQUIPMENT_SCALE, -- exposed for the ball size and aim error
 
 	-- RIM -------------------------------------------------------------------------------
 
 	RIM_POSITION = Vector3.new(0, ft(10), 0), -- centre of the rim, 10 ft off the floor
-	RIM_INNER_RADIUS = ft(0.75), -- inside radius of the rim (18" diameter, NBA size)
-	RIM_TUBE = 0.15, -- thickness of the metal ring, studs
+	RIM_INNER_RADIUS = ft(0.75) * EQUIPMENT_SCALE, -- inside radius of the rim (18" NBA rim, scaled up)
+	RIM_TUBE = 0.22, -- thickness of the metal ring, studs
 	RIM_SEGMENTS = 24, -- the ring is built from this many short blocks; more = rounder
-	RIM_TO_BACKBOARD = ft(1.25), -- distance from the rim's centre to the backboard's face
+	RIM_TO_BACKBOARD = ft(1.25) * EQUIPMENT_SCALE, -- distance from the rim's centre to the backboard's face
 
 	-- BACKBOARD AND SUPPORT -------------------------------------------------------------
 
-	BACKBOARD_SIZE = Vector3.new(ft(6), ft(3.5), 0.15), -- width, height, thickness
+	-- Width, height, thickness. 1.4× regulation (6 × 3.5 ft) so the bigger rim still fits
+	-- nicely without the board towering over the players.
+	BACKBOARD_SIZE = Vector3.new(ft(6) * 1.4, ft(3.5) * 1.4, 0.2),
 	BACKBOARD_BOTTOM = ft(9.5), -- height of the backboard's bottom edge
 	STANCHION_OFFSET = ft(4), -- how far the support pole stands behind the backboard
 
