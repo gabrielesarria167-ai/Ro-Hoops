@@ -2,7 +2,7 @@
 -- BALL CONTROLLER
 -- Owns the test ball and decides makes and misses. The ball is in one of three modes:
 --   Dribble – bouncing beside the player (positioned by code, not physics)
---   Held    – rising along a smooth curve from the dribble to the set point while E is held
+--   Held    – the shooting motion while E is held: into the dip, then up to the release point
 --   Flight  – a shot in the air
 --
 -- How a shot flies: the ball follows its exact arc in code, then switches to real physics
@@ -46,9 +46,10 @@ local dribblePhase = 0 -- 0 to 1 through the current bounce: 0 and 1 = on the fl
 local flight: Flight? = nil -- the shot in the air, or nil
 local launchedAt = 0 -- clock time of the last release (ArmController times the follow-through from it)
 
--- The gather (Held mode): the ball curves from where it was in the dribble to the set point.
+-- The shooting motion (Held mode): dribble → dip pocket → release point.
 local gatherStartedAt = 0 -- clock time when E was pressed
-local gatherDuration = 1 -- seconds until the ball reaches the set point (= the perfect release moment)
+local pocketTime = 0.1 -- seconds after E until the ball is in the dip pocket (hips lowest)
+local releaseTime = 1 -- seconds after E until the ball is at the release point (= the perfect release)
 local gatherFrom = Vector3.zero -- ball position when E was pressed, relative to the hips
 -- Increased whenever a pending "give the ball back" timer should be cancelled; a timer
 -- only fires if the counter hasn't changed since it was started.
@@ -115,18 +116,32 @@ local function toObjectSpace(offset: Vector3): Vector3
 	return Vector3.new(offset.X, offset.Y, -offset.Z)
 end
 
--- Where the ball is during the gather. It follows a curve from `gatherFrom`, bending
--- toward the pocket (chest), ending at the set point, all relative to the hips so it moves
--- and turns with the player. Smoothstep timing makes it start gently, speed up, then
--- settle into the set point right at the perfect release moment.
+-- Eases 0→1 gently at both ends (smoothstep), for motion that starts and stops softly.
+local function ease(p: number): number
+	p = math.clamp(p, 0, 1)
+	return p * p * (3 - 2 * p)
+end
+
+-- Where the ball is during the shooting motion, relative to the hips (so it moves, dips
+-- and turns with the player):
+--   1. from where it was in the dribble into the dip pocket at the chest, arriving as the
+--      hips reach the bottom of the dip;
+--   2. then up along a curve (bent toward RISE_BEND, in front of the face) to the release
+--      point above the head, arriving exactly at the perfect release moment.
 local function gatherPosition(rootCFrame: CFrame): Vector3
-	local p = math.clamp((os.clock() - gatherStartedAt) / gatherDuration, 0, 1)
-	local t = p * p * (3 - 2 * p) -- smoothstep: eases in and out
-	local u = 1 - t
-	-- Quadratic Bezier curve: start → (pulled toward pocket) → set point.
-	local pocket = toObjectSpace(Motion.GATHER_POCKET)
-	local setPoint = toObjectSpace(Motion.SET_POINT)
-	local localPosition = gatherFrom * (u * u) + pocket * (2 * u * t) + setPoint * (t * t)
+	local elapsed = os.clock() - gatherStartedAt
+	local pocket = toObjectSpace(Motion.DIP_POCKET)
+	local localPosition: Vector3
+	if elapsed < pocketTime then
+		localPosition = gatherFrom:Lerp(pocket, ease(elapsed / pocketTime))
+	else
+		local t = ease((elapsed - pocketTime) / math.max(releaseTime - pocketTime, 0.05))
+		local u = 1 - t
+		local bend = toObjectSpace(Motion.RISE_BEND)
+		local release = toObjectSpace(Motion.RELEASE_POINT)
+		-- Quadratic Bezier curve: pocket → (pulled toward bend) → release point.
+		localPosition = pocket * (u * u) + bend * (2 * u * t) + release * (t * t)
+	end
 	return rootCFrame:PointToWorldSpace(localPosition)
 end
 
@@ -229,9 +244,11 @@ function BallController.getLaunchTime(): number
 	return launchedAt
 end
 
--- Starts the gather: the ball rises from the dribble and reaches the set point after
--- `duration` seconds (ShotController passes the time of the perfect release).
-function BallController.hold(duration: number)
+-- Starts the shooting motion. Both times are seconds from now (ShotController works them
+-- out from the jump timing):
+--   toPocket  – when the ball should be in the dip pocket (the bottom of the dip)
+--   toRelease – when it should reach the release point (the perfect release moment)
+function BallController.hold(toPocket: number, toRelease: number)
 	if mode ~= "Dribble" then
 		return
 	end
@@ -240,7 +257,8 @@ function BallController.hold(duration: number)
 		gatherFrom = parts.root.CFrame:PointToObjectSpace(ball.Position)
 	end
 	gatherStartedAt = os.clock()
-	gatherDuration = math.max(duration, 0.05)
+	pocketTime = math.max(toPocket, 0.05)
+	releaseTime = math.max(toRelease, pocketTime + 0.05)
 	mode = "Held"
 end
 

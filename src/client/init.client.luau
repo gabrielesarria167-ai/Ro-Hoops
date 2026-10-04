@@ -9,6 +9,7 @@
 --   Controllers/CameraController    the fixed rim-facing camera
 --   Controllers/BallController      dribble, gather path, shot flight, make/miss detection
 --   Controllers/ArmController       hands on the ball (arm IK) and the follow-through
+--   Controllers/LegController       the knee dip and straight legs in the air (leg IK)
 --   Controllers/ShotController      the E key: shot type, timing, aim
 --   Controllers/HudController       timing meter, callouts, stats panel
 -- All the numbers they use live in src/shared/Config/.
@@ -22,6 +23,7 @@ local ArmController = require(Controllers.ArmController)
 local BallController = require(Controllers.BallController)
 local CameraController = require(Controllers.CameraController)
 local HudController = require(Controllers.HudController)
+local LegController = require(Controllers.LegController)
 local InputController = require(Controllers.InputController)
 local MovementController = require(Controllers.MovementController)
 local ShotController = require(Controllers.ShotController)
@@ -41,5 +43,6 @@ MovementController.start()
 CameraController.start()
 BallController.start()
 ArmController.start()
+LegController.start()
 HudController.start()
 ShotController.start()

@@ -1,16 +1,16 @@
 --!strict
 -- ARM CONTROLLER
--- Makes the hands handle the ball instead of the ball floating next to the body. It uses
--- Roblox's IKControl ("inverse kinematics"): you give it a target point and it bends the
--- shoulder and elbow so the wrist reaches that point, on top of the normal animations.
--- (IKControl moves the wrist joint, not the palm, so targets are wrist positions.)
+-- Makes the hands handle the ball instead of the ball floating next to the body, using
+-- arm IK (see src/client/LimbIK.luau): each frame we say where each palm goes, which way
+-- it faces and where the fingers point, and the arm bends (and the wrist turns) to match,
+-- on top of the normal animations.
 --
---   Dribble – the right hand rides on top of the ball and waits at waist height while the
+--   Dribble – the right palm rides on top of the ball and waits at waist height while the
 --             ball bounces down and back up.
---   Held    – shooting hand behind and under the ball, guide hand on its side, moving
---             with the ball as it rises to the set point.
---   Flight  – the guide hand comes off, the shooting arm extends toward the rim
---             (follow-through), holds, then relaxes back to normal animation.
+--   Held    – shooting hand behind the ball in the dip, sliding under it as it rises to the
+--             release point above the head; guide hand on the side the whole way.
+--   Flight  – both arms reach up toward the rim with the shooting wrist flicked (the
+--             follow-through), hold, then relax back to normal animation.
 --
 -- Only works for R15 characters (the default); R6 characters just skip it.
 -- Tuning values: src/shared/Config/Motion.luau.
@@ -22,20 +22,14 @@ local Ball = require(ReplicatedStorage.Shared.Config.Ball)
 local Motion = require(ReplicatedStorage.Shared.Config.Motion)
 local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
+local LimbIK = require(script.Parent.Parent.LimbIK)
 local BallController = require(script.Parent.BallController)
-
--- One arm's IK setup.
-type Arm = {
-	ik: IKControl, -- bends the arm so the hand reaches `target`
-	target: Attachment, -- where the wrist should go (we move this every frame)
-	pole: Attachment, -- which way the elbow should point
-}
 
 local ArmController = {}
 
 -- The current character's arms, or nil if they aren't set up (yet).
-local rightArm: Arm? = nil -- shooting / dribbling hand
-local leftArm: Arm? = nil -- guide hand
+local rightArm: LimbIK.Limb? = nil -- shooting / dribbling hand
+local leftArm: LimbIK.Limb? = nil -- guide hand
 
 -- How often (seconds) to retry setting up arms that couldn't be found, e.g. while the
 -- avatar is still loading or on an R6 character that will never have them.
@@ -53,64 +47,10 @@ local function fromHips(rootCFrame: CFrame, offset: Vector3): Vector3
 	return rootCFrame:PointToWorldSpace(toObjectSpace(offset))
 end
 
--- Creates the IK for one arm ("Right" or "Left"). Returns nil if the rig lacks the parts.
-local function makeArm(humanoid: Humanoid, character: Model, side: string): Arm?
-	local upperArm = character:FindFirstChild(side .. "UpperArm")
-	local hand = character:FindFirstChild(side .. "Hand")
-	local wrist = hand and hand:FindFirstChild(side .. "WristRigAttachment")
-	if not upperArm or not wrist then
-		return nil
-	end
-
-	-- Target and pole points live on the terrain so we can place them anywhere in the world.
-	local target = Instance.new("Attachment")
-	target.Name = "RoHoops" .. side .. "HandTarget"
-	target.Parent = workspace.Terrain
-	local pole = Instance.new("Attachment")
-	pole.Name = "RoHoops" .. side .. "ElbowPole"
-	pole.Parent = workspace.Terrain
-
-	local ik = Instance.new("IKControl")
-	ik.Name = "RoHoops" .. side .. "Arm"
-	ik.Type = Enum.IKControlType.Position -- move the wrist to the target; the hand keeps its own angle
-	ik.ChainRoot = upperArm -- the chain is upper arm → lower arm
-	ik.EndEffector = wrist -- the wrist joint is the point placed on the target
-	ik.Target = target
-	ik.Pole = pole
-	ik.SmoothTime = Motion.IK_SMOOTH_TIME
-	ik.Weight = 0 -- start relaxed; weights blend up in update()
-	ik.Parent = humanoid
-
-	return { ik = ik, target = target, pole = pole }
-end
-
--- Removes one arm's IK and its helper points.
-local function destroyArm(arm: Arm?)
-	if arm then
-		arm.ik:Destroy()
-		arm.target:Destroy()
-		arm.pole:Destroy()
-	end
-end
-
--- True if `arm` is still attached to body parts inside `character`. When the avatar's
--- appearance loads, Roblox swaps in new arm parts, which leaves an old IK attached to
--- parts that no longer exist.
-local function isAttached(arm: Arm?, character: Model): boolean
-	if not arm or not arm.ik.Parent then
-		return false
-	end
-	local chainRoot, endEffector = arm.ik.ChainRoot, arm.ik.EndEffector
-	return chainRoot ~= nil
-		and endEffector ~= nil
-		and chainRoot:IsDescendantOf(character)
-		and endEffector:IsDescendantOf(character)
-end
-
 -- Makes sure both arms have working IK on the current body parts, rebuilding them if the
 -- parts were missing or replaced. Returns true when both arms are ready.
 local function ensureArms(humanoid: Humanoid, character: Model): boolean
-	if isAttached(rightArm, character) and isAttached(leftArm, character) then
+	if LimbIK.isAttached(rightArm, character) and LimbIK.isAttached(leftArm, character) then
 		return true
 	end
 	local now = os.clock()
@@ -119,17 +59,39 @@ local function ensureArms(humanoid: Humanoid, character: Model): boolean
 	end
 	nextRetryAt = now + RETRY_INTERVAL
 
-	destroyArm(rightArm)
-	destroyArm(leftArm)
-	rightArm = makeArm(humanoid, character, "Right")
-	leftArm = makeArm(humanoid, character, "Left")
+	LimbIK.destroy(rightArm)
+	LimbIK.destroy(leftArm)
+	rightArm = LimbIK.make(
+		humanoid,
+		character,
+		"RightArm",
+		"RightUpperArm",
+		"RightHand",
+		"RightWristRigAttachment",
+		"RightGripAttachment"
+	)
+	leftArm = LimbIK.make(
+		humanoid,
+		character,
+		"LeftArm",
+		"LeftUpperArm",
+		"LeftHand",
+		"LeftWristRigAttachment",
+		"LeftGripAttachment"
+	)
+	-- Let the wrists bend back far enough to hold the ball (see LimbIK.freeJoints).
+	LimbIK.freeJoints(
+		character,
+		{ "RightShoulder", "RightElbow", "RightWrist", "LeftShoulder", "LeftElbow", "LeftWrist" }
+	)
 	return rightArm ~= nil and leftArm ~= nil
 end
 
--- Moves an arm's weight toward `goal` (0 = normal animation, 1 = wrist on target) smoothly.
-local function blendWeight(arm: Arm, goal: number, alpha: number)
-	arm.ik.Weight += (goal - arm.ik.Weight) * alpha
-	arm.ik.SmoothTime = Motion.IK_SMOOTH_TIME -- re-read so live tuning applies
+-- Puts `arm`'s palm on the ball at `direction` (from the ball's centre, world space),
+-- facing the centre, fingers pointing `fingers`.
+local function palmOnBall(arm: LimbIK.Limb, ballPosition: Vector3, direction: Vector3, fingers: Vector3)
+	local dir = direction.Unit
+	LimbIK.placeHand(arm, ballPosition + dir * (Ball.RADIUS + Motion.PALM_GAP), -dir, fingers)
 end
 
 -- Runs every frame after the ball has been positioned.
@@ -138,50 +100,71 @@ local function update(dt: number)
 	if not parts or not ensureArms(parts.humanoid, parts.character) then
 		return
 	end
-	local right, left = rightArm :: Arm, leftArm :: Arm
+	local right, left = rightArm :: LimbIK.Limb, leftArm :: LimbIK.Limb
 
 	local rootCFrame = parts.root.CFrame
+	-- Turns a Motion-config direction (right, up, forward) into a world direction.
+	local function bodyDirection(offset: Vector3): Vector3
+		return rootCFrame:VectorToWorldSpace(toObjectSpace(offset))
+	end
 	local ballPosition = BallController.getPosition()
 	local mode = BallController.getMode()
 	local rightGoal, leftGoal = 0, 0 -- how much each arm should follow its target this frame
 
 	if mode == "Dribble" then
-		-- Hand on top of the ball, but the wrist never lower than DRIBBLE_WRIST_MIN_HEIGHT.
+		-- Palm on top of the ball (facing down), but never lower than DRIBBLE_PALM_MIN_HEIGHT.
 		local floorY = rootCFrame.Position.Y - parts.humanoid.HipHeight - parts.root.Size.Y / 2
-		local wristY =
-			math.max(ballPosition.Y + Ball.RADIUS + Motion.DRIBBLE_WRIST_GAP, floorY + Motion.DRIBBLE_WRIST_MIN_HEIGHT)
-		right.target.WorldPosition = Vector3.new(ballPosition.X, wristY, ballPosition.Z)
+		local palmY = math.max(ballPosition.Y + Ball.RADIUS + Motion.PALM_GAP, floorY + Motion.DRIBBLE_PALM_MIN_HEIGHT)
+		local palm = Vector3.new(ballPosition.X, palmY, ballPosition.Z)
+		LimbIK.placeHand(right, palm, -Vector3.yAxis, bodyDirection(Motion.DRIBBLE_FINGERS))
 		right.pole.WorldPosition = fromHips(rootCFrame, Motion.DRIBBLE_ELBOW)
 		rightGoal = 1
 	elseif mode == "Held" then
-		-- Both hands on the ball: each wrist sits out from the ball's centre in its hand's
-		-- direction, turned to match the player's facing.
-		local ballFrame = CFrame.new(ballPosition) * rootCFrame.Rotation
-		local shootingWrist = Motion.SHOOTING_HAND.Unit * (Ball.RADIUS + Motion.SHOOTING_WRIST_GAP)
-		local guideWrist = Motion.GUIDE_HAND.Unit * (Ball.RADIUS + Motion.GUIDE_WRIST_GAP)
-		right.target.WorldPosition = ballFrame:PointToWorldSpace(toObjectSpace(shootingWrist))
-		left.target.WorldPosition = ballFrame:PointToWorldSpace(toObjectSpace(guideWrist))
+		-- How far the ball has risen from the dip pocket (0) to the release point (1). The
+		-- shooting hand slides from behind the ball to under it over that range.
+		local ballHeight = rootCFrame:PointToObjectSpace(ballPosition).Y
+		local rise = math.clamp(
+			(ballHeight - Motion.DIP_POCKET.Y) / math.max(Motion.RELEASE_POINT.Y - Motion.DIP_POCKET.Y, 0.01),
+			0,
+			1
+		)
+		local shootingSpot = Motion.SHOOTING_HAND_LOW:Lerp(Motion.SHOOTING_HAND_HIGH, rise)
+		local shootingFingers = Motion.SHOOTING_FINGERS_LOW:Lerp(Motion.SHOOTING_FINGERS_HIGH, rise)
+		palmOnBall(right, ballPosition, bodyDirection(shootingSpot), bodyDirection(shootingFingers))
+		palmOnBall(left, ballPosition, bodyDirection(Motion.GUIDE_HAND), bodyDirection(Motion.GUIDE_FINGERS))
 		right.pole.WorldPosition = fromHips(rootCFrame, Motion.SHOOTING_ELBOW)
 		left.pole.WorldPosition = fromHips(rootCFrame, Motion.GUIDE_ELBOW)
 		rightGoal, leftGoal = 1, 1
 	elseif os.clock() - BallController.getLaunchTime() < Motion.FOLLOW_THROUGH_TIME then
-		-- Follow-through: shooting arm reaches toward the rim; guide hand lets go.
-		right.target.WorldPosition = fromHips(rootCFrame, Motion.FOLLOW_THROUGH)
+		-- Follow-through: both arms reach up toward the rim and hold; shooting wrist flicked.
+		LimbIK.placeHand(
+			right,
+			fromHips(rootCFrame, Motion.FOLLOW_THROUGH),
+			bodyDirection(Motion.FOLLOW_THROUGH_FACING),
+			bodyDirection(Motion.FOLLOW_THROUGH_FINGERS)
+		)
+		LimbIK.placeHand(
+			left,
+			fromHips(rootCFrame, Motion.GUIDE_FOLLOW_THROUGH),
+			bodyDirection(Motion.GUIDE_FOLLOW_THROUGH_FACING),
+			bodyDirection(Motion.GUIDE_FINGERS)
+		)
 		right.pole.WorldPosition = fromHips(rootCFrame, Motion.SHOOTING_ELBOW)
-		rightGoal = 1
+		left.pole.WorldPosition = fromHips(rootCFrame, Motion.GUIDE_ELBOW)
+		rightGoal, leftGoal = 1, 1
 	end
 
 	local alpha = MovementMath.smoothingAlpha(Motion.IK_BLEND_SHARPNESS, dt)
-	blendWeight(right, rightGoal, alpha)
-	blendWeight(left, leftGoal, alpha)
+	LimbIK.blend(right, rightGoal, alpha)
+	LimbIK.blend(left, leftGoal, alpha)
 end
 
 function ArmController.start()
 	-- On a new character, drop the old arms; update() sets up the new ones once the
 	-- character's body parts exist.
 	CharacterRef.onSpawn(function()
-		destroyArm(rightArm)
-		destroyArm(leftArm)
+		LimbIK.destroy(rightArm)
+		LimbIK.destroy(leftArm)
 		rightArm, leftArm = nil, nil
 		nextRetryAt = 0
 	end)

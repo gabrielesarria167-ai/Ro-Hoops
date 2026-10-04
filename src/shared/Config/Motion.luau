@@ -1,36 +1,48 @@
 --!strict
 -- SHOOTING MOTION SETTINGS
--- How the shot looks: the path the ball takes from the dribble up to the release, where
--- the hands sit on the ball, how the body turns and jumps, and the follow-through.
--- Used by BallController (ball path), ArmController (hands) and ShotController (body).
+-- How the jump shot looks, modelled on a real one:
+--   1. DIP     – knees bend, the ball comes into both hands at the chest
+--   2. RISE    – legs drive up into the jump, the ball rises past the face
+--   3. RELEASE – at the top, the ball is above the head on a fully extended shooting arm
+--   4. FOLLOW-THROUGH – both arms stay up while you come down
+-- Used by BallController (ball path), ArmController (hands), LegController (knees and legs)
+-- and ShotController (turning and jump timing).
 --
 -- Positions are written as Vector3.new(right, up, forward), measured from the player's
--- hips (the HumanoidRootPart) and turning with the player. So (0.3, 2.45, 0.75) means
--- 0.3 studs to the right, 2.45 up and 0.75 in front of the hips.
+-- hips (the HumanoidRootPart) and turning with the player. So (0.35, 2.75, 0.7) means
+-- 0.35 studs to the right, 2.75 up and 0.7 in front of the hips.
 -- Live-tunable under ReplicatedStorage > Tuning > Motion while playing in Studio.
 
 local Motion = {
-	-- BALL PATH (dribble → release) -----------------------------------------------------
-	-- When E is pressed the ball curves from wherever it is in the dribble, past the chest,
-	-- up to the set point above the forehead. It arrives at the set point exactly at the
-	-- perfect release moment, so the top of the motion lines up with the green zone.
+	-- BALL PATH (dribble → dip → release) ------------------------------------------------
+	-- The ball reaches RELEASE_POINT exactly at the perfect release moment, so the top of
+	-- the motion lines up with the green zone.
 
-	-- The curve bends toward this point on the way up (around the chest).
-	GATHER_POCKET = Vector3.new(0.35, 0.9, 1.15),
-	-- Where the ball is at the perfect release: in front of the forehead. (Roblox arms are
-	-- short next to the big head, so the ball can't go much higher and stay in both hands.)
-	SET_POINT = Vector3.new(0.3, 1.85, 1.35),
+	-- Where the ball sits at the bottom of the dip: both hands, at the chest. It arrives
+	-- when the hips are lowest (see DIP_LOWEST_POINT), then rises with the jump.
+	DIP_POCKET = Vector3.new(0.3, 0.45, 1.2),
+	-- On the way up, the ball's path bends toward this point, keeping it in front of the
+	-- face instead of passing through the head.
+	RISE_BEND = Vector3.new(0.35, 2.4, 1.6),
+	-- Where the ball is at the perfect release: above the head on an extended arm.
+	RELEASE_POINT = Vector3.new(0.35, 2.75, 0.7),
 
 	-- HANDS ON THE BALL (arm IK) --------------------------------------------------------
-	-- The arms are bent automatically so the wrists reach target points (Roblox IKControl
-	-- moves the wrist; the hand itself keeps its animated angle). Each hand's target is in
-	-- a direction from the ball's centre, (right, up, forward), at the ball's radius plus a
-	-- gap that leaves room for the hand between the wrist and the ball.
+	-- The arms bend so each PALM sits on the ball, facing the ball's centre, with the
+	-- fingers pointing a chosen way (Roblox IKControl, see src/client/LimbIK.luau).
+	-- A hand's spot on the ball is a direction from the ball's centre, (right, up, forward).
 
-	SHOOTING_HAND = Vector3.new(0.25, -0.8, -0.55), -- right hand: under and slightly behind the ball
-	SHOOTING_WRIST_GAP = 0.2, -- studs between the ball's surface and the right wrist
-	GUIDE_HAND = Vector3.new(-0.85, 0, -0.5), -- left hand: on the side, toward the back
-	GUIDE_WRIST_GAP = 0.25, -- studs between the ball's surface and the left wrist
+	-- The shooting hand slides from behind the ball (in the dip, fingers up) to under it
+	-- (at the release, fingers toward the rim) as the ball rises.
+	SHOOTING_HAND_LOW = Vector3.new(0.15, -0.3, -0.95), -- dip: behind the ball
+	SHOOTING_FINGERS_LOW = Vector3.new(0, 1, 0), -- dip: fingers up
+	SHOOTING_HAND_HIGH = Vector3.new(0.1, -0.95, -0.25), -- release: under the ball
+	SHOOTING_FINGERS_HIGH = Vector3.new(0, 0.3, 1), -- release: fingers forward, toward the rim
+	-- The guide (left) hand stays on the side of the ball, fingers up.
+	GUIDE_HAND = Vector3.new(-1, 0.05, -0.1),
+	GUIDE_FINGERS = Vector3.new(0, 1, 0.2),
+	-- Gap between the palm and the ball's surface, studs (stops the hand sinking in).
+	PALM_GAP = 0.06,
 
 	-- Elbow aim points (from the hips). Each elbow bends toward its point, which keeps the
 	-- arms in a natural shape instead of folding the wrong way.
@@ -38,22 +50,40 @@ local Motion = {
 	GUIDE_ELBOW = Vector3.new(-2, 0.8, 0.8), -- guide elbow points out to the left
 	DRIBBLE_ELBOW = Vector3.new(2, 0.6, -1), -- dribbling elbow points out and back
 
-	-- While dribbling, the right hand rides on top of the ball but its wrist never drops
-	-- below this height above the floor (studs), so it "waits" while the ball goes down.
-	DRIBBLE_WRIST_MIN_HEIGHT = 2.4,
-	-- Height of the dribbling wrist above the top of the ball (the hand is in between), studs.
-	DRIBBLE_WRIST_GAP = 0.35,
+	-- While dribbling, the right palm rides on top of the ball (facing down, fingers
+	-- DRIBBLE_FINGERS) but never drops below DRIBBLE_PALM_MIN_HEIGHT above the floor, so it
+	-- "waits" there while the ball goes down and comes back up.
+	DRIBBLE_FINGERS = Vector3.new(0, -0.2, 1),
+	DRIBBLE_PALM_MIN_HEIGHT = 2.1,
 
-	-- After release the shooting wrist reaches up and toward the rim (the follow-through;
-	-- the arm straightens as far as it can) and holds for FOLLOW_THROUGH_TIME seconds.
-	FOLLOW_THROUGH = Vector3.new(0.45, 2.3, 1.2),
-	FOLLOW_THROUGH_TIME = 0.6,
+	-- FOLLOW-THROUGH: after release both arms reach up toward the rim (they straighten as
+	-- far as they can) and hold for FOLLOW_THROUGH_TIME seconds. The shooting hand finishes
+	-- in a "gooseneck": wrist flicked, palm facing down, fingers pointing at the rim.
+	FOLLOW_THROUGH = Vector3.new(0.5, 2.8, 1.1), -- shooting palm position (from the hips); out of reach, so the arm straightens
+	FOLLOW_THROUGH_FACING = Vector3.new(0, -0.6, -0.8), -- which way that palm faces
+	FOLLOW_THROUGH_FINGERS = Vector3.new(0, -0.8, 0.6), -- which way its fingers point
+	GUIDE_FOLLOW_THROUGH = Vector3.new(-0.6, 2.6, 0.9), -- guide palm: up beside it, a bit lower
+	GUIDE_FOLLOW_THROUGH_FACING = Vector3.new(1, 0, 0), -- guide palm faces the shooting hand
+	FOLLOW_THROUGH_TIME = 0.7,
 
 	-- How smoothly the hands move. IK_SMOOTH_TIME is how long a hand takes to catch up
 	-- with its target, in seconds (0 = instantly, rigid). IK_BLEND_SHARPNESS is how fast
 	-- an arm switches between "following the ball" and "normal animation" (higher = faster).
 	IK_SMOOTH_TIME = 0.02,
 	IK_BLEND_SHARPNESS = 12,
+
+	-- LEGS (leg IK) ---------------------------------------------------------------------
+
+	-- How far the hips drop at the bottom of the dip, studs. The feet stay planted, so the
+	-- knees bend. 0.4 is a solid athletic dip; 0.6+ is a deep squat.
+	DIP_DEPTH = 0.4,
+	-- When the hips are lowest, as a fraction of the dip (0 = at E press, 1 = at takeoff).
+	-- After that the legs drive up into the jump. The ball reaches DIP_POCKET at this moment.
+	DIP_LOWEST_POINT = 0.6,
+	-- Knee aim point (from the hips): knees bend forward, over the toes.
+	KNEE_POLE = Vector3.new(0, -1.5, 3),
+	-- How fast the legs switch between IK and normal animation (higher = faster).
+	LEG_BLEND_SHARPNESS = 20,
 
 	-- BODY ------------------------------------------------------------------------------
 
@@ -63,9 +93,11 @@ local Motion = {
 	-- How quickly your momentum changes into the shot's drift (studs/s²). Lower = you slide
 	-- further into a pull-up; higher = you stop more abruptly.
 	DRIFT_BLEND_RATE = 60,
-	-- The jump is delayed so you reach the top of it at the perfect release moment, but
-	-- never by more than this many seconds (keeps long shots from feeling sluggish).
-	MAX_JUMP_DELAY = 0.15,
+	-- Time on the ground before the jump (the dip), seconds. The jump is timed so you peak
+	-- at the perfect release, but the dip always lasts at least MIN_DIP_TIME (so it's
+	-- visible) and at most MAX_DIP_TIME (so long shots don't feel sluggish).
+	MIN_DIP_TIME = 0.16,
+	MAX_DIP_TIME = 0.22,
 }
 
 return Motion

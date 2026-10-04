@@ -56,7 +56,8 @@ src/
     CollisionGroups.luau
   client/              -> StarterPlayerScripts.Client
     CharacterRef.luau  current character tracking
-    Controllers/       Input, Movement, Camera, Ball, Arm, Shot, Hud
+    LimbIK.luau        shared arm/leg IK helper (hands on the ball, planted feet)
+    Controllers/       Input, Movement, Camera, Ball, Arm, Leg, Shot, Hud
 tests/                 Lune specs for the pure modules
 ```
 

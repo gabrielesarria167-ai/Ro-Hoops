@@ -4,13 +4,15 @@
 --   1. picks the shot type from your position and movement (ShotMath.classify):
 --      jump shot, pull-up, fadeaway, step-back, side shot, layup or close shot,
 --   2. starts the timing meter, eases your momentum into the shot's drift, turns you
---      smoothly to face the rim, and starts the ball rising (BallController.hold),
---   3. jumps a moment later, timed so you're at the top of the jump at the perfect release.
+--      smoothly to face the rim, and starts the shooting motion: knees dip
+--      (LegController) while the ball comes to the chest (BallController.hold),
+--   3. jumps at the end of the dip, timed so you're near the top of the jump at the
+--      perfect release, when the ball reaches the release point above your head.
 -- Releasing E:
 --   4. grades the timing (ShotMath.grade) and turns it into an aim error (ShotMath.aimError),
 --   5. solves the arc to that target (ShotMath.launchVelocity) and launches the ball.
 -- Tuning values: src/shared/Config/Shooting.luau (timing, aim, shot types) and
--- src/shared/Config/Motion.luau (turn speed, jump timing, drift blending).
+-- src/shared/Config/Motion.luau (turn speed, dip length, drift blending).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -25,6 +27,7 @@ local CharacterRef = require(script.Parent.Parent.CharacterRef)
 local BallController = require(script.Parent.BallController)
 local HudController = require(script.Parent.HudController)
 local InputController = require(script.Parent.InputController)
+local LegController = require(script.Parent.LegController)
 local MovementController = require(script.Parent.MovementController)
 
 -- Ready     = can shoot
@@ -115,15 +118,19 @@ local function begin()
 	-- turning toward its movement direction.
 	humanoid.AutoRotate = false
 
-	-- Time the jump so its peak lands on the perfect release. Jump power p reaches its peak
-	-- after p / gravity seconds; wait the difference (never longer than MAX_JUMP_DELAY).
+	-- Time the dip (the time on the ground before takeoff) so the jump peaks at the perfect
+	-- release: jump power p reaches its peak after p / gravity seconds, so dip for the
+	-- difference, but keep the dip between MIN_DIP_TIME and MAX_DIP_TIME.
 	local now = os.clock()
 	local idealReleaseTime = config.FILL_TIME * Shooting.IDEAL_RELEASE
 	local timeToPeak = config.JUMP_POWER / workspace.Gravity
-	local jumpDelay = math.clamp(idealReleaseTime - timeToPeak, 0, Motion.MAX_JUMP_DELAY)
+	local dipTime = math.clamp(idealReleaseTime - timeToPeak, Motion.MIN_DIP_TIME, Motion.MAX_DIP_TIME)
 
-	BallController.hold(idealReleaseTime) -- ball reaches the set point at the perfect moment
-	shot = { config = config, startedAt = now, jumpAt = now + jumpDelay, jumpedAt = nil }
+	LegController.startDip(dipTime)
+	-- The ball is in the chest pocket when the hips are lowest, and at the release point
+	-- above the head at the perfect moment.
+	BallController.hold(dipTime * Motion.DIP_LOWEST_POINT, idealReleaseTime)
+	shot = { config = config, startedAt = now, jumpAt = now + dipTime, jumpedAt = nil }
 	phase = "Gathering"
 	HudController.beginShot(config.LABEL)
 end
@@ -169,6 +176,7 @@ local function land()
 	phase = "Ready"
 	shot = nil
 	MovementController.setOverride(nil)
+	LegController.land()
 	local parts = CharacterRef.get()
 	if parts then
 		parts.humanoid.AutoRotate = true
@@ -189,6 +197,7 @@ local function step(dt: number)
 	local now = os.clock()
 	if not activeShot.jumpedAt and now >= activeShot.jumpAt then
 		jump(parts.humanoid, activeShot.config)
+		LegController.takeoff()
 		activeShot.jumpedAt = now
 	end
 
@@ -226,6 +235,7 @@ function ShotController.start()
 		phase = "Ready"
 		shot = nil
 		MovementController.setOverride(nil)
+		LegController.land()
 	end)
 	-- "Input + 2" priority runs right after MovementController each frame.
 	RunService:BindToRenderStep("RoHoopsShot", Enum.RenderPriority.Input.Value + 2, step)
