@@ -3,20 +3,27 @@
 -- The lower body of the jump shot, using leg IK (see src/client/LimbIK.luau):
 --   Dip  – the hips drop (by lowering the Humanoid's HipHeight) while the feet stay
 --          planted, so the knees bend; then the legs drive back up into the takeoff.
---   Air  – the legs reach straight down (extended, like a real jumper) until landing.
+--   Air  – jump shot: both legs reach straight down (extended, like a real jumper).
+--          Layup: the right knee drives up while the left leg (the one you jumped off)
+--          stays straight and trails slightly behind.
+--          Either way the legs follow the body's lean (PostureController), so on a
+--          fadeaway the feet swing forward as the body tilts back, in one straight line.
 --   Off  – normal walking/standing animation.
 -- ShotController tells it when each phase starts (startDip / takeoff / land).
 --
 -- Only works for R15 characters (the default); R6 characters just skip it.
--- Tuning values: src/shared/Config/Motion.luau (DIP_DEPTH, DIP_LOWEST_POINT, KNEE_POLE...).
+-- Tuning values: src/shared/Config/Motion.luau (DIP_DEPTH, DIP_LOWEST_POINT, KNEE_POLE,
+-- LAYUP_DIP_DEPTH, LAYUP_KNEE_DRIVE_...).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Motion = require(ReplicatedStorage.Shared.Config.Motion)
+local Shooting = require(ReplicatedStorage.Shared.Config.Shooting)
 local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
 local LimbIK = require(script.Parent.Parent.LimbIK)
+local PostureController = require(script.Parent.PostureController)
 
 type Phase = "Off" | "Dip" | "Air"
 
@@ -32,6 +39,8 @@ local nextRetryAt = 0 -- clock time of the next setup retry
 local phase: Phase = "Off"
 local dipStartedAt = 0 -- clock time when the dip began
 local dipDuration = 0.2 -- seconds from the start of the dip to takeoff
+local takeoffAt = 0 -- clock time of the takeoff
+local style: Shooting.MotionStyle = "JumpShot" -- which motion the current shot uses
 local baseHipHeight = 0 -- the Humanoid's normal HipHeight, restored after the dip
 local floorY = 0 -- height of the floor under the player when the dip began
 -- Where each ankle was (relative to the hips) when the dip began; the feet stay there.
@@ -67,6 +76,9 @@ local function ensureLegs(humanoid: Humanoid, character: Model): boolean
 		)
 		legs[side] = leg :: any
 	end
+	-- Let the hips bend far enough for the layup's knee drive (newer avatars limit the hip
+	-- to a 40° cone for ragdolls, see LimbIK.freeJoints).
+	LimbIK.freeJoints(character, { "RightHip", "RightKnee", "LeftHip", "LeftKnee" })
 	return legs.Right ~= nil and legs.Left ~= nil
 end
 
@@ -83,8 +95,15 @@ local function dipAmount(progress: number): number
 	return math.sin(wave * math.pi)
 end
 
--- Starts the dip. `duration` = seconds until takeoff.
-function LegController.startDip(duration: number)
+-- Eases 0→1 gently at both ends (smoothstep), for motion that starts and stops softly.
+local function ease(p: number): number
+	p = math.clamp(p, 0, 1)
+	return p * p * (3 - 2 * p)
+end
+
+-- Starts the dip. `duration` = seconds until takeoff; `motionStyle` = which motion the
+-- shot uses (a layup has a shallower dip and a knee drive in the air).
+function LegController.startDip(duration: number, motionStyle: Shooting.MotionStyle)
 	local parts = CharacterRef.get()
 	if not parts then
 		return
@@ -111,11 +130,13 @@ function LegController.startDip(duration: number)
 
 	dipStartedAt = os.clock()
 	dipDuration = math.max(duration, 0.05)
+	style = motionStyle
 	phase = "Dip"
 end
 
--- The player left the ground: straighten the legs.
+-- The player left the ground: straighten the legs (or, on a layup, drive the knee up).
 function LegController.takeoff()
+	takeoffAt = os.clock()
 	phase = "Air"
 end
 
@@ -136,11 +157,13 @@ local function update(dt: number)
 
 	if phase == "Dip" then
 		local progress = (os.clock() - dipStartedAt) / dipDuration
-		parts.humanoid.HipHeight = baseHipHeight - Motion.DIP_DEPTH * dipAmount(progress)
+		local depth = if style == "Layup" then Motion.LAYUP_DIP_DEPTH else Motion.DIP_DEPTH
+		parts.humanoid.HipHeight = baseHipHeight - depth * dipAmount(progress)
 		for _, side in SIDES do
 			local planted = plantedAnkles[side]
 			local leg = legs[side]
 			if planted and leg then
+				LimbIK.pinToWorld(leg, true) -- planted: the target must not move down with the hips
 				-- Feet stay where they were, at their original height above the floor, while the
 				-- hips (and everything relative to them) move down and up.
 				local ankleHeight = planted.Y + baseHipHeight + parts.root.Size.Y / 2
@@ -153,14 +176,28 @@ local function update(dt: number)
 		goal = 1
 	elseif phase == "Air" then
 		parts.humanoid.HipHeight = baseHipHeight
+		-- Measure from the leaned body, so the legs tilt with it.
+		local bodyCFrame = PostureController.getBodyCFrame(rootCFrame)
 		for _, side in SIDES do
 			local planted = plantedAnkles[side]
 			local leg = legs[side]
 			if planted and leg then
-				-- Aim the ankles far below the hips: out of reach, so the legs straighten.
-				leg.target.WorldPosition = rootCFrame:PointToWorldSpace(Vector3.new(planted.X, -6, planted.Z))
-				leg.pole.WorldPosition =
-					rootCFrame:PointToWorldSpace(toObjectSpace(Motion.KNEE_POLE) + Vector3.new(planted.X, 0, 0))
+				LimbIK.pinToWorld(leg, false) -- in the air: the target moves with the body
+				-- Jump shot: aim the ankles far below the hips (out of reach), so the legs straighten.
+				local ankle = Vector3.new(planted.X, -6, planted.Z)
+				local pole = toObjectSpace(Motion.KNEE_POLE) + Vector3.new(planted.X, 0, 0)
+				if style == "Layup" and side == "Right" then
+					-- Knee drive: the right ankle rises from where it was planted to the
+					-- knee-up spot over LAYUP_KNEE_DRIVE_TIME.
+					local drive = ease((os.clock() - takeoffAt) / math.max(Motion.LAYUP_KNEE_DRIVE_TIME, 0.01))
+					ankle = planted:Lerp(toObjectSpace(Motion.LAYUP_KNEE_DRIVE_ANKLE), drive)
+					pole = toObjectSpace(Motion.LAYUP_KNEE_DRIVE_POLE)
+				elseif style == "Layup" then
+					-- Takeoff leg: straight, trailing a little behind.
+					ankle = toObjectSpace(Motion.LAYUP_TAKEOFF_ANKLE)
+				end
+				leg.target.WorldPosition = bodyCFrame:PointToWorldSpace(ankle)
+				leg.pole.WorldPosition = bodyCFrame:PointToWorldSpace(pole)
 			end
 		end
 		goal = 1

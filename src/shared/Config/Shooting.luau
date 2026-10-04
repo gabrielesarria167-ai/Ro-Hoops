@@ -9,6 +9,12 @@
 --
 -- Live-tunable under ReplicatedStorage > Tuning > Shooting while playing in Studio.
 
+-- Which body motion a shot uses (the positions for each live in Config/Motion.luau):
+--   "JumpShot" – two-foot dip, ball up past the face to above the head, both hands on it
+--   "Layup"    – gather step, jump off the left foot driving the right knee up, ball
+--                carried up the right side and laid in on an extended right arm
+export type MotionStyle = "JumpShot" | "Layup"
+
 -- The settings every shot type has (see `Types` at the bottom of this file).
 export type ShotTypeConfig = {
 	-- Name shown above the meter.
@@ -26,6 +32,15 @@ export type ShotTypeConfig = {
 	ARC_HEIGHT: number,
 	-- Multiplies the aim error of a mistimed release. 1 = normal, 2 = misses twice as far.
 	DIFFICULTY: number,
+	-- Which body motion the shot uses (see MotionStyle above). Not live-tunable.
+	MOTION: MotionStyle,
+	-- How far the whole body tilts back in the air, degrees (negative = forward). It leans
+	-- in from takeoff to the perfect release and straightens up after landing.
+	LEAN: number,
+	-- How far the whole body tilts sideways in the air, degrees. It always tilts the SAME
+	-- way you are drifting sideways (a side shot moving left to right bends left to right,
+	-- carrying the momentum through the shot). Same timing as LEAN.
+	SIDE_LEAN: number,
 }
 
 local Shooting = {
@@ -72,8 +87,12 @@ local Shooting = {
 	CLOSE_RANGE_FT = 8,
 	-- Moving slower than this (studs/s) counts as standing still → Jump Shot.
 	STATIONARY_SPEED = 3,
-	-- A layup carries you toward the rim but stops you this many feet short of it.
-	LAYUP_STOP_FT = 4,
+	-- A layup carries you toward the rim but slows you so that you are this many feet from
+	-- it (measured to your hips) at the moment of release. The ball is released about a foot
+	-- further forward, so 5.5 ft puts it ~3.7 studs from the rim's centre: close enough to
+	-- score, far enough that it rises over the front of the rim instead of into it. Lower it
+	-- and layups start hitting the front of the rim.
+	LAYUP_RELEASE_FT = 5.5,
 
 	-- SHOT TYPES ------------------------------------------------------------------------
 	-- One entry per shot. The key (e.g. JumpShot) must match a ShotType in ShotMath.luau.
@@ -88,6 +107,9 @@ local Shooting = {
 			LATERAL_DRIFT = 0,
 			ARC_HEIGHT = 2.5,
 			DIFFICULTY = 1,
+			MOTION = "JumpShot",
+			LEAN = 0,
+			SIDE_LEAN = 0,
 		},
 		-- Moving toward the rim outside close range. You stop and rise.
 		PullUp = {
@@ -98,8 +120,12 @@ local Shooting = {
 			LATERAL_DRIFT = 0,
 			ARC_HEIGHT = 2.5,
 			DIFFICULTY = 1.15,
+			MOTION = "JumpShot",
+			LEAN = 0,
+			SIDE_LEAN = 0,
 		},
-		-- Walking away from the rim. You drift backward in the air.
+		-- Walking away from the rim. You jump backward, leaning ~20° away from the rim, and
+		-- shoot with a higher arc over the defender.
 		Fadeaway = {
 			LABEL = "Fadeaway",
 			FILL_TIME = 0.45,
@@ -108,6 +134,9 @@ local Shooting = {
 			LATERAL_DRIFT = 0,
 			ARC_HEIGHT = 2.8,
 			DIFFICULTY = 1.3,
+			MOTION = "JumpShot",
+			LEAN = 20, -- the whole body tilts back in one straight line, feet to head
+			SIDE_LEAN = 0,
 		},
 		-- Running (Shift) away from the rim. A bigger backward hop than a fadeaway.
 		StepBack = {
@@ -118,6 +147,9 @@ local Shooting = {
 			LATERAL_DRIFT = 0,
 			ARC_HEIGHT = 2.8,
 			DIFFICULTY = 1.35,
+			MOTION = "JumpShot",
+			LEAN = 0,
+			SIDE_LEAN = 0,
 		},
 		-- Moving mostly sideways. You drift sideways in the air.
 		SideShot = {
@@ -128,16 +160,25 @@ local Shooting = {
 			LATERAL_DRIFT = 5,
 			ARC_HEIGHT = 2.6,
 			DIFFICULTY = 1.25,
+			MOTION = "JumpShot",
+			LEAN = 0,
+			SIDE_LEAN = 15, -- tilts 15° toward the sideways drift
 		},
-		-- Moving toward the rim inside close range. You carry forward and lay it in.
+		-- Moving toward the rim inside close range. You take off from the left foot, drive the
+		-- right knee up, and lay the ball in off an extended right arm.
 		Layup = {
 			LABEL = "Layup",
 			FILL_TIME = 0.34,
 			JUMP_POWER = 20,
-			DRIFT = 9, -- maximum; reduced automatically so you stop LAYUP_STOP_FT short of the rim
+			DRIFT = 9, -- maximum; reduced automatically so you are LAYUP_RELEASE_FT from the rim at release
 			LATERAL_DRIFT = 0,
-			ARC_HEIGHT = 1,
+			-- Studs the arc peaks above the rim. The ball is released well below the rim, so a
+			-- low arc (1) sends it up into the ring; 2.5 lets it rise over the front edge.
+			ARC_HEIGHT = 2.5,
 			DIFFICULTY = 0.5,
+			MOTION = "Layup",
+			LEAN = -4, -- a touch forward, carrying the drive into the rim
+			SIDE_LEAN = 0,
 		},
 		-- Standing or backing up inside close range.
 		CloseShot = {
@@ -148,6 +189,9 @@ local Shooting = {
 			LATERAL_DRIFT = 0,
 			ARC_HEIGHT = 1.5,
 			DIFFICULTY = 0.7,
+			MOTION = "JumpShot",
+			LEAN = 0,
+			SIDE_LEAN = 0,
 		},
 	} :: { [string]: ShotTypeConfig },
 }

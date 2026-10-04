@@ -20,6 +20,8 @@ export type Limb = {
 	-- For hands: offset from the wrist joint to the palm, in the hand's own space. Lets
 	-- placeHand work out where the wrist must be for the palm to land on a point.
 	palmOffset: Vector3,
+	-- What `target` and `pole` ride on by default: the HumanoidRootPart (see make).
+	body: Instance,
 }
 
 local LimbIK = {}
@@ -48,13 +50,18 @@ function LimbIK.make(
 		return nil
 	end
 
-	-- Target and pole points live on the terrain so they can be placed anywhere in the world.
+	-- Target and pole points ride on the HumanoidRootPart, so they move with the body.
+	-- The IK uses them a frame after we set them; if they were fixed in the world, a
+	-- fast-moving body (e.g. rising 20 studs/s into a layup) would leave the hands and
+	-- feet trailing behind. Planted feet want the opposite (see pinToWorld). Falls back
+	-- to the terrain if there's no root part.
+	local holder = character:FindFirstChild("HumanoidRootPart") or workspace.Terrain
 	local target = Instance.new("Attachment")
 	target.Name = "RoHoops" .. name .. "Target"
-	target.Parent = workspace.Terrain
+	target.Parent = holder
 	local pole = Instance.new("Attachment")
 	pole.Name = "RoHoops" .. name .. "Pole"
-	pole.Parent = workspace.Terrain
+	pole.Parent = holder
 
 	local ik = Instance.new("IKControl")
 	ik.Name = "RoHoops" .. name
@@ -73,7 +80,19 @@ function LimbIK.make(
 		target = target,
 		pole = pole,
 		palmOffset = if palmAttachment and joint then palmAttachment.Position - joint.Position else Vector3.zero,
+		body = holder,
 	}
+end
+
+-- true: fixes the limb's target in the world, e.g. a planted foot that must stay put
+-- while the hips move. false: the target rides with the body again (the default).
+-- Call before setting the target's position for the frame.
+function LimbIK.pinToWorld(limb: Limb, pinned: boolean)
+	local holder = if pinned then workspace.Terrain else limb.body
+	if limb.target.Parent ~= holder then
+		limb.target.Parent = holder
+		limb.pole.Parent = holder
+	end
 end
 
 -- Removes a limb's IK and its helper points.

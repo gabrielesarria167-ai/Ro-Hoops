@@ -7,7 +7,10 @@
 --      smoothly to face the rim, and starts the shooting motion: knees dip
 --      (LegController) while the ball comes to the chest (BallController.hold),
 --   3. jumps at the end of the dip, timed so you're near the top of the jump at the
---      perfect release, when the ball reaches the release point above your head.
+--      perfect release, when the ball reaches the release point. From takeoff the body
+--      leans by the shot type's LEAN (a fadeaway tilts back ~20°) and SIDE_LEAN (a side
+--      shot tilts ~15° sideways, the same way it drifts), fully leaned at the perfect
+--      release (PostureController.leanTo).
 -- Releasing E:
 --   4. grades the timing (ShotMath.grade) and turns it into an aim error (ShotMath.aimError),
 --   5. solves the arc to that target (ShotMath.launchVelocity) and launches the ball.
@@ -41,6 +44,8 @@ type ActiveShot = {
 	config: Shooting.ShotTypeConfig, -- the settings of the chosen shot type
 	startedAt: number, -- clock time when E was pressed, seconds
 	jumpAt: number, -- clock time when the jump should happen
+	releaseAt: number, -- clock time of the perfect release (the body is fully leaned by then)
+	driftSide: number, -- 1 if drifting to the player's right, -1 if left (the side lean tilts the same way)
 	jumpedAt: number?, -- clock time when the jump actually happened (nil = still on the ground)
 	leftGround: boolean, -- true once the player has actually been seen in the air
 }
@@ -106,13 +111,23 @@ local function begin()
 	}, Shooting)
 	local config = Shooting.Types[typeId]
 
+	-- Time the dip (the time on the ground before takeoff) so the jump peaks at the perfect
+	-- release: jump power p reaches its peak after p / gravity seconds, so dip for the
+	-- difference, but keep the dip between MIN_DIP_TIME and MAX_DIP_TIME.
+	local now = os.clock()
+	local idealReleaseTime = config.FILL_TIME * Shooting.IDEAL_RELEASE
+	local timeToPeak = config.JUMP_POWER / workspace.Gravity
+	local dipTime = math.clamp(idealReleaseTime - timeToPeak, Motion.MIN_DIP_TIME, Motion.MAX_DIP_TIME)
+
 	-- How the player moves through the air during the shot.
 	local drift: Vector3
 	if typeId == "Layup" then
-		-- Carry the drive toward the rim, but slow it so the player stops LAYUP_STOP_FT short.
-		local airTime = 2 * config.JUMP_POWER / workspace.Gravity -- seconds in the air
-		local room = distance - Court.ft(Shooting.LAYUP_STOP_FT) -- studs left before stopping
-		drift = toward * math.clamp(room / airTime, 0, config.DRIFT)
+		-- Carry the drive toward the rim, but slow it so the player is LAYUP_RELEASE_FT from
+		-- the rim at the moment of release. The drive starts now (it also covers the dip), so
+		-- the time to cover the distance is the time until the perfect release, not just
+		-- the time in the air. Releasing from too close sends the ball up into the rim.
+		local room = distance - Court.ft(Shooting.LAYUP_RELEASE_FT) -- studs to cover before release
+		drift = toward * math.clamp(room / math.max(idealReleaseTime, 0.05), 0, config.DRIFT)
 	else
 		local side = if lateralSpeed >= 0 then 1 else -1 -- keep drifting the way you were moving
 		drift = toward * config.DRIFT + lateral * side * config.LATERAL_DRIFT
@@ -123,20 +138,21 @@ local function begin()
 	-- turning toward its movement direction.
 	humanoid.AutoRotate = false
 
-	-- Time the dip (the time on the ground before takeoff) so the jump peaks at the perfect
-	-- release: jump power p reaches its peak after p / gravity seconds, so dip for the
-	-- difference, but keep the dip between MIN_DIP_TIME and MAX_DIP_TIME.
-	local now = os.clock()
-	local idealReleaseTime = config.FILL_TIME * Shooting.IDEAL_RELEASE
-	local timeToPeak = config.JUMP_POWER / workspace.Gravity
-	local dipTime = math.clamp(idealReleaseTime - timeToPeak, Motion.MIN_DIP_TIME, Motion.MAX_DIP_TIME)
-
-	LegController.startDip(dipTime)
+	-- config.MOTION picks the jump shot or layup version of the legs, ball path and hands.
+	LegController.startDip(dipTime, config.MOTION)
 	PostureController.setShooting(true) -- stay upright, eyes on the rim
 	-- The ball is in the chest pocket when the hips are lowest, and at the release point
-	-- above the head at the perfect moment.
-	BallController.hold(dipTime * Motion.DIP_LOWEST_POINT, idealReleaseTime)
-	shot = { config = config, startedAt = now, jumpAt = now + dipTime, jumpedAt = nil, leftGround = false }
+	-- at the perfect moment.
+	BallController.hold(dipTime * Motion.DIP_LOWEST_POINT, idealReleaseTime, config.MOTION)
+	shot = {
+		config = config,
+		startedAt = now,
+		jumpAt = now + dipTime,
+		releaseAt = now + idealReleaseTime,
+		driftSide = if lateralSpeed >= 0 then 1 else -1,
+		jumpedAt = nil,
+		leftGround = false,
+	}
 	phase = "Gathering"
 	HudController.beginShot(config.LABEL)
 end
@@ -184,6 +200,7 @@ local function land()
 	MovementController.setOverride(nil)
 	LegController.land()
 	PostureController.setShooting(false)
+	PostureController.leanTo(0, Motion.LEAN_RECOVER_TIME) -- straighten back up
 	local parts = CharacterRef.get()
 	if parts then
 		parts.humanoid.AutoRotate = true
@@ -205,6 +222,14 @@ local function step(dt: number)
 	if not activeShot.jumpedAt and now >= activeShot.jumpAt then
 		jump(parts.humanoid, activeShot.config)
 		LegController.takeoff()
+		-- Lean into the shot (e.g. back on a fadeaway), fully leaned at the perfect release.
+		PostureController.leanTo(
+			activeShot.config.LEAN,
+			math.max(activeShot.releaseAt - now, Motion.MIN_LEAN_TIME),
+			-- Sideways lean, toward the drift: driftSide is +1 drifting right / -1 left, and a
+			-- positive side lean tilts right, so moving left→right bends the body left→right.
+			activeShot.driftSide * activeShot.config.SIDE_LEAN
+		)
 		activeShot.jumpedAt = now
 	end
 	local grounded = parts.humanoid.FloorMaterial ~= Enum.Material.Air
@@ -253,6 +278,7 @@ function ShotController.start()
 		MovementController.setOverride(nil)
 		LegController.land()
 		PostureController.setShooting(false)
+		PostureController.leanTo(0, 0)
 	end)
 	-- "Input + 2" priority runs right after MovementController each frame.
 	RunService:BindToRenderStep("RoHoopsShot", Enum.RenderPriority.Input.Value + 2, step)
