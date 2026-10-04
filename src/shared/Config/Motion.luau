@@ -97,6 +97,10 @@ local Motion = {
 
 	-- BODY ------------------------------------------------------------------------------
 
+	-- How strongly the head turns to look at the rim during a shot (0 = not at all,
+	-- 1 = eyes locked on the rim). See PostureController.
+	HEAD_LOOK_WEIGHT = 1,
+
 	-- How fast the body turns to face the rim when a shot starts (higher = snappier).
 	-- 18 turns most of the way in about 0.15 s.
 	TURN_SHARPNESS = 18,

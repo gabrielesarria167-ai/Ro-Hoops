@@ -28,6 +28,7 @@ local BallController = require(script.Parent.BallController)
 local HudController = require(script.Parent.HudController)
 local InputController = require(script.Parent.InputController)
 local LegController = require(script.Parent.LegController)
+local PostureController = require(script.Parent.PostureController)
 local MovementController = require(script.Parent.MovementController)
 
 -- Ready     = can shoot
@@ -41,10 +42,14 @@ type ActiveShot = {
 	startedAt: number, -- clock time when E was pressed, seconds
 	jumpAt: number, -- clock time when the jump should happen
 	jumpedAt: number?, -- clock time when the jump actually happened (nil = still on the ground)
+	leftGround: boolean, -- true once the player has actually been seen in the air
 }
 
 local SHOOT_KEY = Enum.KeyCode.E -- change this to rebind shooting
 local MIN_AIR_TIME = 0.2 -- seconds; ignore "on the ground" readings right after takeoff
+-- If the player somehow never leaves the ground after jumping, end the shot after this
+-- many seconds anyway so controls don't stay locked.
+local JUMP_FAILSAFE = 1.5
 
 local ShotController = {}
 
@@ -127,10 +132,11 @@ local function begin()
 	local dipTime = math.clamp(idealReleaseTime - timeToPeak, Motion.MIN_DIP_TIME, Motion.MAX_DIP_TIME)
 
 	LegController.startDip(dipTime)
+	PostureController.setShooting(true) -- stay upright, eyes on the rim
 	-- The ball is in the chest pocket when the hips are lowest, and at the release point
 	-- above the head at the perfect moment.
 	BallController.hold(dipTime * Motion.DIP_LOWEST_POINT, idealReleaseTime)
-	shot = { config = config, startedAt = now, jumpAt = now + dipTime, jumpedAt = nil }
+	shot = { config = config, startedAt = now, jumpAt = now + dipTime, jumpedAt = nil, leftGround = false }
 	phase = "Gathering"
 	HudController.beginShot(config.LABEL)
 end
@@ -177,6 +183,7 @@ local function land()
 	shot = nil
 	MovementController.setOverride(nil)
 	LegController.land()
+	PostureController.setShooting(false)
 	local parts = CharacterRef.get()
 	if parts then
 		parts.humanoid.AutoRotate = true
@@ -200,6 +207,10 @@ local function step(dt: number)
 		LegController.takeoff()
 		activeShot.jumpedAt = now
 	end
+	local grounded = parts.humanoid.FloorMaterial ~= Enum.Material.Air
+	if activeShot.jumpedAt and not grounded then
+		activeShot.leftGround = true
+	end
 
 	if phase == "Gathering" then
 		local progress = (os.clock() - activeShot.startedAt) / activeShot.config.FILL_TIME
@@ -209,11 +220,16 @@ local function step(dt: number)
 			release()
 		end
 	elseif phase == "Airborne" then
-		-- Landed = we did jump, have been up for a moment, and are touching the floor again.
+		-- Landed = we jumped, were seen in the air, and are touching the floor again.
+		-- (Roblox reports the floor material a few frames late, so right after takeoff it
+		-- still says "on the floor"; waiting until we've seen the player airborne avoids
+		-- ending the shot mid-air.)
 		local jumpedAt = activeShot.jumpedAt
-		local grounded = parts.humanoid.FloorMaterial ~= Enum.Material.Air
-		if jumpedAt and now - jumpedAt > MIN_AIR_TIME and grounded then
-			land()
+		if jumpedAt and grounded then
+			local airTime = now - jumpedAt
+			if airTime > MIN_AIR_TIME and (activeShot.leftGround or airTime > JUMP_FAILSAFE) then
+				land()
+			end
 		end
 	end
 end
@@ -236,6 +252,7 @@ function ShotController.start()
 		shot = nil
 		MovementController.setOverride(nil)
 		LegController.land()
+		PostureController.setShooting(false)
 	end)
 	-- "Input + 2" priority runs right after MovementController each frame.
 	RunService:BindToRenderStep("RoHoopsShot", Enum.RenderPriority.Input.Value + 2, step)

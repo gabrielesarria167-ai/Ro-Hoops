@@ -10,6 +10,7 @@
 --   Controllers/BallController      dribble, gather path, shot flight, make/miss detection
 --   Controllers/ArmController       hands on the ball (arm IK) and the follow-through
 --   Controllers/LegController       the knee dip and straight legs in the air (leg IK)
+--   Controllers/PostureController   upright torso and eyes on the rim during a shot
 --   Controllers/ShotController      the E key: shot type, timing, aim
 --   Controllers/HudController       timing meter, callouts, stats panel
 -- All the numbers they use live in src/shared/Config/.
@@ -26,6 +27,7 @@ local HudController = require(Controllers.HudController)
 local LegController = require(Controllers.LegController)
 local InputController = require(Controllers.InputController)
 local MovementController = require(Controllers.MovementController)
+local PostureController = require(Controllers.PostureController)
 local ShotController = require(Controllers.ShotController)
 
 -- In Studio, expose these configs under ReplicatedStorage.Tuning for live editing.
@@ -44,5 +46,6 @@ CameraController.start()
 BallController.start()
 ArmController.start()
 LegController.start()
+PostureController.start()
 HudController.start()
 ShotController.start()

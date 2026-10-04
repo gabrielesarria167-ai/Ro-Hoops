@@ -57,7 +57,7 @@ src/
   client/              -> StarterPlayerScripts.Client
     CharacterRef.luau  current character tracking
     LimbIK.luau        shared arm/leg IK helper (hands on the ball, planted feet)
-    Controllers/       Input, Movement, Camera, Ball, Arm, Leg, Shot, Hud
+    Controllers/       Input, Movement, Camera, Ball, Arm, Leg, Posture, Shot, Hud
 tests/                 Lune specs for the pure modules
 ```
 
