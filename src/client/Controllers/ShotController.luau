@@ -113,7 +113,7 @@ local function release()
 
 	phase = "Airborne"
 	HudController.releaseShot(grade, progress)
-	BallController.launch(Vector3.new(vx, vy, vz), function(made)
+	BallController.launch(Vector3.new(vx, vy, vz), workspace.Gravity, function(made)
 		HudController.shotResolved(made, grade)
 	end)
 end

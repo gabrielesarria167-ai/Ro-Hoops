@@ -25,6 +25,7 @@ local Ball = {
 	HOLD_HEIGHT = 2.6, -- above the root part while gathering a shot
 	HOLD_FORWARD = 0.6,
 
+	HANDOFF_DISTANCE = 2.5, -- a shot switches from its scripted arc to physics this close to the rim
 	MISS_DEPTH = 2, -- a falling ball this far below the rim can no longer go in
 	SHOT_TIMEOUT = 4, -- seconds before a shot stuck on the rim counts as a miss
 	RETURN_DELAY = 1.2, -- seconds after a shot resolves before the ball comes back

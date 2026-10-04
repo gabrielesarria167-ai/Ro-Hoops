@@ -138,7 +138,9 @@ local function build()
 
 	local statsPanel = Instance.new("Frame")
 	statsPanel.Name = "Stats"
-	statsPanel.Position = UDim2.fromOffset(16, 64)
+	-- Top-right, clear of the chat window and Roblox's top-left menu buttons.
+	statsPanel.AnchorPoint = Vector2.new(1, 0)
+	statsPanel.Position = UDim2.new(1, -16, 0, 64)
 	statsPanel.Size = UDim2.fromOffset(170, 74)
 	statsPanel.BackgroundColor3 = PANEL_COLOR
 	statsPanel.BackgroundTransparency = 0.35

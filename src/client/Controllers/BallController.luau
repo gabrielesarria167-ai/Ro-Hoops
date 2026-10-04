@@ -1,8 +1,12 @@
 --!strict
 -- Owns the local test ball. While the player has it, the ball is anchored and positioned in
--- code (a simple dribble, or held overhead while gathering a shot). On release it's handed
--- to the physics engine so the rim and backboard decide the outcome. A make is detected
--- when the ball's center crosses down through the rim circle.
+-- code (a simple dribble, or held overhead while gathering a shot).
+--
+-- A shot is flown along its exact parabola in code, then handed to the physics engine just
+-- before it reaches the hoop so the rim and backboard decide the outcome. Flying it in code
+-- matters: Roblox integrates a lone ball at 60 Hz, which makes it fall short of the analytic
+-- arc by ~0.3 studs over a jump shot - enough to turn a perfect release into front rim.
+-- A make is detected when the ball's center crosses down through the rim circle.
 --
 -- The ball only exists on this client. That's fine for single-player testing; ball state
 -- will move to the server once possession and opponents exist.
@@ -18,6 +22,10 @@ local MovementController = require(script.Parent.MovementController)
 type Mode = "Dribble" | "Held" | "Flight"
 
 type Flight = {
+	origin: Vector3,
+	launchVelocity: Vector3,
+	gravity: number,
+	scripted: boolean, -- true until the ball is handed to physics near the hoop
 	previous: Vector3,
 	startedAt: number,
 	resolved: boolean,
@@ -49,8 +57,45 @@ local function createBall(): Part
 	return part
 end
 
-local function carry(dt: number)
+local function handToPhysics(current: Flight, position: Vector3, velocity: Vector3)
+	current.scripted = false
+	ball.CFrame = CFrame.new(position)
+	ball.CustomPhysicalProperties = PhysicalProperties.new(Ball.DENSITY, Ball.FRICTION, Ball.ELASTICITY, 1, 1)
+	-- Re-applied here because the group may not have replicated yet when the ball was created.
+	ball.CollisionGroup = Ball.COLLISION_GROUP
+	ball.Anchored = false
+	ball.CanCollide = true
+	ball.AssemblyLinearVelocity = velocity
+
+	local flat = Vector3.new(velocity.X, 0, velocity.Z)
+	ball.AssemblyAngularVelocity = if flat.Magnitude > 1e-3
+		then flat.Unit:Cross(Vector3.yAxis) * Ball.BACKSPIN
+		else Vector3.zero
+end
+
+local function fly(current: Flight)
+	local t = os.clock() - current.startedAt
+	local gravity = Vector3.yAxis * current.gravity
+	local position = current.origin + current.launchVelocity * t - gravity * (0.5 * t * t)
+	local velocity = current.launchVelocity - gravity * t
+
+	local rim = Court.RIM_POSITION
+	local nearHoop = (position - rim).Magnitude <= Ball.HANDOFF_DISTANCE
+	-- Way-off shots never get near the hoop; let physics take them as they come down.
+	local comingDown = velocity.Y < 0 and position.Y <= rim.Y + 1
+	if nearHoop or comingDown then
+		handToPhysics(current, position, velocity)
+	else
+		ball.CFrame = CFrame.new(position)
+	end
+end
+
+local function update(dt: number)
 	if mode == "Flight" then
+		local current = flight
+		if current and current.scripted then
+			fly(current)
+		end
 		return
 	end
 	local parts = CharacterRef.get()
@@ -115,7 +160,7 @@ local function track()
 		end
 	end
 
-	local fallingBelowRim = ball.AssemblyLinearVelocity.Y < 0 and position.Y < rim.Y - Ball.MISS_DEPTH
+	local fallingBelowRim = position.Y < previous.Y and position.Y < rim.Y - Ball.MISS_DEPTH
 	if fallingBelowRim or os.clock() - current.startedAt > Ball.SHOT_TIMEOUT then
 		resolve(current, false)
 	end
@@ -136,22 +181,15 @@ function BallController.hold()
 	end
 end
 
-function BallController.launch(velocity: Vector3, onResolved: (made: boolean) -> ())
+-- Shoot the ball from where it is with `velocity`, under `gravity` (studs/s², downward).
+function BallController.launch(velocity: Vector3, gravity: number, onResolved: (made: boolean) -> ())
 	mode = "Flight"
 	local from = ball.Position
-	ball.CustomPhysicalProperties = PhysicalProperties.new(Ball.DENSITY, Ball.FRICTION, Ball.ELASTICITY, 1, 1)
-	-- Re-applied here because the group may not have replicated yet when the ball was created.
-	ball.CollisionGroup = Ball.COLLISION_GROUP
-	ball.Anchored = false
-	ball.CanCollide = true
-	ball.AssemblyLinearVelocity = velocity
-
-	local flat = Vector3.new(velocity.X, 0, velocity.Z)
-	ball.AssemblyAngularVelocity = if flat.Magnitude > 1e-3
-		then flat.Unit:Cross(Vector3.yAxis) * Ball.BACKSPIN
-		else Vector3.zero
-
 	flight = {
+		origin = from,
+		launchVelocity = velocity,
+		gravity = gravity,
+		scripted = true,
 		previous = from,
 		startedAt = os.clock(),
 		resolved = false,
@@ -175,7 +213,7 @@ function BallController.start()
 	CharacterRef.onSpawn(function()
 		BallController.giveBack()
 	end)
-	RunService:BindToRenderStep("RoHoopsBall", Enum.RenderPriority.Character.Value + 1, carry)
+	RunService:BindToRenderStep("RoHoopsBall", Enum.RenderPriority.Character.Value + 1, update)
 	RunService.Heartbeat:Connect(track)
 end
 
