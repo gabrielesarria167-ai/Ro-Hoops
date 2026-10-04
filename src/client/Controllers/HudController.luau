@@ -206,10 +206,11 @@ function HudController.beginShot(label: string)
 	shotGroup.GroupTransparency = 0
 
 	-- Laid out on every shot so live-tuned windows show up immediately.
-	local zoneStart = meterScale(1 - Shooting.PERFECT_WINDOW)
+	local ideal = Shooting.IDEAL_RELEASE
+	local zoneStart = meterScale(ideal - Shooting.PERFECT_WINDOW)
 	perfectZone.Position = UDim2.fromScale(zoneStart, 0)
-	perfectZone.Size = UDim2.fromScale(meterScale(1 + Shooting.PERFECT_WINDOW) - zoneStart, 1)
-	targetTick.Position = UDim2.fromScale(meterScale(1), 0)
+	perfectZone.Size = UDim2.fromScale(meterScale(ideal + Shooting.PERFECT_WINDOW) - zoneStart, 1)
+	targetTick.Position = UDim2.fromScale(meterScale(ideal), 0)
 
 	meterFill.Size = UDim2.fromScale(0, 1)
 	meterFill.BackgroundColor3 = FILL_COLOR

@@ -3,7 +3,7 @@ local ShotMath = require("../src/shared/ShotMath")
 local t = require("./harness")
 
 local CLASSIFY = { CLOSE_RANGE_FT = 8, STATIONARY_SPEED = 3 }
-local GRADE = { PERFECT_WINDOW = 0.06, GOOD_WINDOW = 0.14, OK_WINDOW = 0.28 }
+local GRADE = { IDEAL_RELEASE = 1, PERFECT_WINDOW = 0.06, GOOD_WINDOW = 0.14, OK_WINDOW = 0.28 }
 local AIM = {
 	PERFECT_WINDOW = 0.06,
 	PERFECT_SPREAD = 0.05,
@@ -64,6 +64,15 @@ t.describe("ShotMath.grade", function()
 		t.equal(late, "Late")
 		t.equal(veryEarly, "VeryEarly")
 		t.equal(veryLate, "VeryLate")
+	end)
+
+	t.test("centers the windows on an earlier ideal release", function()
+		local early = { IDEAL_RELEASE = 0.92, PERFECT_WINDOW = 0.06, GOOD_WINDOW = 0.14, OK_WINDOW = 0.28 }
+		local offset, perfect = ShotMath.grade(0.9, early)
+		local _, good = ShotMath.grade(1, early)
+		t.near(offset, -0.02, 1e-9)
+		t.equal(perfect, "Perfect")
+		t.equal(good, "Good", "the old ideal point is now slightly late")
 	end)
 
 	t.test("returns the signed offset", function()

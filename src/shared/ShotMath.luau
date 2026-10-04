@@ -21,6 +21,7 @@ export type ClassifyConfig = {
 }
 
 export type GradeConfig = {
+	IDEAL_RELEASE: number,
 	PERFECT_WINDOW: number,
 	GOOD_WINDOW: number,
 	OK_WINDOW: number,
@@ -63,10 +64,10 @@ function ShotMath.classify(context: ShotContext, config: ClassifyConfig): ShotTy
 	return "PullUp"
 end
 
--- `progress` is held time / fill time, so 1 is the ideal release. Returns the signed timing
--- offset (negative = early) and its grade.
+-- `progress` is held time / fill time; the ideal release is at `IDEAL_RELEASE`. Returns the
+-- signed timing offset (negative = early) and its grade.
 function ShotMath.grade(progress: number, config: GradeConfig): (number, Grade)
-	local offset = progress - 1
+	local offset = progress - config.IDEAL_RELEASE
 	local miss = math.abs(offset)
 	if miss <= config.PERFECT_WINDOW then
 		return offset, "Perfect"

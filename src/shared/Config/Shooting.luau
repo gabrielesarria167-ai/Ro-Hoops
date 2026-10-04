@@ -1,11 +1,12 @@
 --!strict
 -- Shooting tuning. `E` picks a shot type from the player's movement (see ShotMath.classify),
--- holding it fills the timing meter, and releasing at the top of the meter is a perfect
--- release. Timing is measured as progress = held time / FILL_TIME, so 1.0 is ideal.
+-- holding it fills the timing meter, and releasing inside the green zone is a perfect
+-- release. Timing is measured as progress = held time / FILL_TIME; the ideal release is at
+-- IDEAL_RELEASE, a little before the meter's nominal end.
 
 export type ShotTypeConfig = {
 	LABEL: string,
-	FILL_TIME: number, -- seconds from pressing E to the ideal release
+	FILL_TIME: number, -- seconds for the meter to reach progress 1 (the ideal release is IDEAL_RELEASE of this)
 	JUMP_POWER: number, -- vertical takeoff speed, studs/s
 	DRIFT: number, -- velocity toward the rim during the jump (negative = away), studs/s
 	LATERAL_DRIFT: number, -- sideways velocity in the direction the player was moving, studs/s
@@ -14,6 +15,9 @@ export type ShotTypeConfig = {
 }
 
 local Shooting = {
+	-- Where the green zone is centered, as progress through FILL_TIME. Lower = release earlier.
+	IDEAL_RELEASE = 0.92,
+
 	-- Timing windows, as a fraction of FILL_TIME either side of the ideal release.
 	PERFECT_WINDOW = 0.06,
 	GOOD_WINDOW = 0.14,
