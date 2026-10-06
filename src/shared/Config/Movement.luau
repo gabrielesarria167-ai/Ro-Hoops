@@ -12,6 +12,12 @@ local Movement = {
 	WALK_SPEED = 13, -- top speed with no Shift held
 	RUN_SPEED = 21, -- top speed while holding Shift
 
+	-- The body always faces the rim, so moving sideways is a shuffle and moving back is a
+	-- backpedal. Like a real player, you're slower that way than running at the basket.
+	-- Share of the top speed: 1 = as fast as forward. Diagonals blend between.
+	SIDE_SPEED_SCALE = 0.8, -- straight sideways (a defensive-style shuffle)
+	BACK_SPEED_SCALE = 0.65, -- straight back (a backpedal)
+
 	-- RESPONSIVENESS --------------------------------------------------------------------
 	-- Bigger numbers = snappier. E.g. ACCELERATION 70 means walking speed (13) is reached in
 	-- 13 / 70 ≈ 0.19 seconds.
@@ -22,6 +28,11 @@ local Movement = {
 
 	-- Below this speed the player is treated as standing still (avoids tiny drifting).
 	STOP_EPSILON = 0.05,
+
+	-- FACING ----------------------------------------------------------------------------
+	-- The body always faces the rim (moving sideways or backward is a shuffle/backpedal,
+	-- not a turn). How quickly it turns to keep facing it: higher = snappier, lower = lazier.
+	FACE_RIM_SHARPNESS = 14,
 }
 
 return Movement

@@ -9,7 +9,8 @@
 --             waist height while it bounces down and back up. In a dribble move (H switch
 --             or crossover) the other hand waits where it will catch the ball, and the
 --             hand that let go relaxes. In the wide crossover the palm holds the ball's
---             outer side instead of its top.
+--             outer side instead of its top. The free hand holds up an arm bar to protect
+--             the ball (Motion.ARM_BAR_...).
 --   Held    – shooting hand behind the ball in the dip, sliding under it as it rises to the
 --             release point above the head; guide hand on the side the whole way.
 --   Flight  – both arms reach up and forward toward the rim with the shooting wrist
@@ -169,7 +170,10 @@ local function update(dt: number)
 			local spot = Vector3.new(0, 1, 0):Lerp(Vector3.new(wide.X * sideSign, wide.Y, wide.Z), grip)
 			local direction = rootCFrame:VectorToWorldSpace(toObjectSpace(spot)).Unit
 			local palm = at + direction * (Ball.RADIUS + Motion.PALM_GAP)
-			local minY = floorY + Motion.DRIBBLE_PALM_MIN_HEIGHT * (1 - grip)
+			-- (Lowered with the crouch, like the ball: see BallController.lowered.)
+			local crouch = parts.humanoid:GetAttribute("RoHoopsCrouch")
+			local minHeight = Motion.DRIBBLE_PALM_MIN_HEIGHT - (if type(crouch) == "number" then crouch else 0)
+			local minY = floorY + minHeight * (1 - grip)
 			LimbIK.placeHand(
 				arm,
 				Vector3.new(palm.X, math.max(palm.Y, minY), palm.Z),
@@ -194,6 +198,35 @@ local function update(dt: number)
 		end
 		if handling.waiting and handling.waitPoint then
 			handOnBall(handling.waiting, handling.waitPoint, handling.grip)
+		end
+
+		-- Arm bar: the hand that is neither holding the ball nor waiting for it comes up in
+		-- front of the body, on its own side, to protect the ball. (If neither hand is busy,
+		-- the ball is loose between them and both stay as they are.)
+		local busy = { [handling.holder or ""] = true, [handling.waiting or ""] = true }
+		local free: string? = if not busy.Left and busy.Right
+			then "Left"
+			elseif not busy.Right and busy.Left then "Right"
+			else nil
+		if free then
+			local arm = if free == "Right" then right else left
+			-- The config's "out" points to the free hand's own side: right for the right hand.
+			local sideSign = if free == "Right" then 1 else -1
+			local function onFreeSide(v: Vector3): Vector3
+				return Vector3.new(v.X * sideSign, v.Y, v.Z)
+			end
+			LimbIK.placeHand(
+				arm,
+				fromHips(bodyCFrame, onFreeSide(Motion.ARM_BAR_PALM)),
+				bodyDirection(onFreeSide(Motion.ARM_BAR_FACING)),
+				bodyDirection(Motion.ARM_BAR_FINGERS)
+			)
+			arm.pole.WorldPosition = fromHips(bodyCFrame, onFreeSide(Motion.ARM_BAR_ELBOW))
+			if free == "Right" then
+				rightGoal = 1
+			else
+				leftGoal = 1
+			end
 		end
 	elseif mode == "Held" then
 		-- How far the ball has risen from the pocket (0) to the release point (1). The

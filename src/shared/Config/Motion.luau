@@ -70,6 +70,15 @@ local Motion = {
 	DRIBBLE_FINGERS = Vector3.new(0, -0.2, 1),
 	DRIBBLE_PALM_MIN_HEIGHT = 2.1,
 
+	-- ARM BAR: while dribbling, the free hand comes up to protect the ball, like a real
+	-- ball handler: upper arm ~45° out from the body, elbow bent ~90°, forearm up in front
+	-- with the palm toward the defender. (out, up, forward) from the hips, where "out" is
+	-- toward the free hand's own side (mirrored automatically for either hand).
+	ARM_BAR_PALM = Vector3.new(0.85, 0.4, 1.25), -- where the palm is (about chest-low)
+	ARM_BAR_FACING = Vector3.new(0.3, 0, 1), -- palm faces forward and a little out
+	ARM_BAR_FINGERS = Vector3.new(0, 1, 0.3), -- fingers up
+	ARM_BAR_ELBOW = Vector3.new(2.5, 0.2, 0.3), -- elbow points out to the side
+
 	-- FOLLOW-THROUGH: right after release both arms reach up and forward toward the rim
 	-- (they straighten as far as they can). The shooting hand is in a "gooseneck": wrist
 	-- flicked, palm facing down, fingers pointing at the rim. After a short hold the arms

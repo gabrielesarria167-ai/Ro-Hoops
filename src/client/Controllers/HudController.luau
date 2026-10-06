@@ -3,6 +3,7 @@
 -- Everything drawn on screen, built in code:
 --   * bottom-centre: the shot timing meter, the shot type and the result callout
 --   * top-right: a stats panel (speed, distance to the rim, field goals) for tuning
+--   * centre: the crosshair, where the mouse is locked (SkillController.lockMouse)
 -- ShotController tells it what to show through beginShot / setProgress / releaseShot /
 -- shotResolved.
 
@@ -26,6 +27,7 @@ local PANEL_COLOR = Color3.fromRGB(16, 18, 22) -- dark background behind the met
 local FILL_COLOR = Color3.fromRGB(235, 235, 235) -- meter fill while E is held
 local MADE_COLOR = Color3.fromRGB(80, 220, 120) -- "BUCKET" text
 local MISSED_COLOR = Color3.fromRGB(235, 80, 80) -- "MISS" text
+local CROSSHAIR_COLOR = Color3.fromRGB(255, 255, 255) -- the dot in the middle of the screen
 
 -- Meter fill and callout colour for each release grade.
 local GRADE_COLORS: { [ShotMath.Grade]: Color3 } = {
@@ -51,6 +53,11 @@ local GRADE_TEXT: { [ShotMath.Grade]: string } = {
 
 local FADE_DELAY = 1.3 -- seconds the result stays on screen before fading
 local FADE_INFO = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out) -- fade length and curve
+
+-- CROSSHAIR ---------------------------------------------------------------------------
+
+local CROSSHAIR_SIZE = 6 -- pixels across the dot
+local CROSSHAIR_TRANSPARENCY = 0.25 -- 0 = solid, 1 = invisible
 
 -- SCREEN ELEMENTS (created in build()) --------------------------------------------------
 
@@ -158,6 +165,23 @@ local function build()
 	targetTick.Size = UDim2.new(0, 2, 1, 0) -- 2 pixels wide, full meter height
 	targetTick.ZIndex = 2 -- drawn above the fill
 	targetTick.Parent = meter
+
+	-- Crosshair: a small round dot exactly in the middle of the screen, where the mouse is
+	-- locked. IgnoreGuiInset (above) makes the GUI's middle the screen's true middle.
+	local crosshair = Instance.new("Frame")
+	crosshair.Name = "Crosshair"
+	crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+	crosshair.Position = UDim2.fromScale(0.5, 0.5)
+	crosshair.Size = UDim2.fromOffset(CROSSHAIR_SIZE, CROSSHAIR_SIZE)
+	crosshair.BackgroundColor3 = CROSSHAIR_COLOR
+	crosshair.BackgroundTransparency = CROSSHAIR_TRANSPARENCY
+	crosshair.BorderSizePixel = 0
+	crosshair.Parent = gui
+	corner(crosshair, CROSSHAIR_SIZE) -- fully rounded = a circle
+	local outline = Instance.new("UIStroke") -- thin dark ring so it shows on light floors too
+	outline.Color = PANEL_COLOR
+	outline.Transparency = 0.4
+	outline.Parent = crosshair
 
 	-- Stats panel, top-right, clear of the chat window and Roblox's top-left menu buttons.
 	local statsPanel = Instance.new("Frame")

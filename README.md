@@ -22,15 +22,18 @@ Start from the built place rather than a Studio template, so there's no Baseplat
 
 | Input | Action |
 |---|---|
-| `W A S D` / arrows | Move (relative to the screen, so up is always toward the rim) |
+| `W A S D` / arrows | Move (relative to the screen: the camera is locked onto the rim, so up is always toward the rim and left/right circle round it). The body always faces the rim: A/D shuffle sideways, S backpedals |
 | `Shift` | Run |
 | `E` (hold, release) | Shoot / finish. Release when the meter reaches the white tick |
 | `H` | Quick hand switch |
 | Flick toward the empty hand | Wide (Iverson-style) crossover |
+| Flick toward the hand with the ball | Stab dribble: a hard dribble out to that side, stepping that way |
 | Flick backward | Step-back |
-| Draw a circle | 360 spin (reverse pivot), switching hands during the spin (clockwise circle = clockwise spin) |
+| Draw a circle (a quick half circle is enough) | 360 spin (reverse pivot): the ball hand pulls the ball round and bounces it as the turn ends, then the other hand takes it (clockwise circle = clockwise spin) |
 
-Mouse/trackpad moves need no button: flick or circle quickly; slow cursor movement does nothing. Each move takes at most one short step.
+Mouse/trackpad moves need no button: flick or circle quickly; slow movement does nothing. Each move takes at most one short step. The mouse is locked in the middle of the screen (shown by a crosshair dot) and the game reads how far it moves; press Esc to get the pointer back.
+
+The body animates procedurally, after real basketball footwork (`Config/Footwork`): a low dribbling stance (knees bent, chest over the ball, ball-side foot back, free arm up as an arm bar), a shuffle sideways that never crosses the feet, a backpedal, the crossover's jab and push-off, the stab's push-pull step, the step-back's "1-2" landing and the spin's pivot foot and swing leg. Running forward uses Roblox's run animation. In Studio you can try a move from the command bar (client view): `game.ReplicatedStorage.RoHoopsPerformMove:Fire("Spin", -1)`.
 
 What `E` does depends on where you are and how you're moving when you press it:
 
@@ -48,15 +51,16 @@ Early releases fall short and late ones go long. Perfect releases (inside the gr
 
 ## Live tuning
 
-In Studio, every number and position in `Config/Movement`, `Config/Camera`, `Config/Shooting`, `Config/Ball` and `Config/Motion` appears as an attribute under `ReplicatedStorage > Tuning` while playing; switch the Explorer to the **client** view to edit them. Changes apply immediately but aren't saved, so copy values you like back into the config files. `Workspace.Gravity` (55) controls both jump height and ball flight.
+In Studio, every number and position in `Config/Movement`, `Config/Camera`, `Config/Shooting`, `Config/Ball`, `Config/Motion`, `Config/Skills` and `Config/Footwork` appears as an attribute under `ReplicatedStorage > Tuning` while playing; switch the Explorer to the **client** view to edit them. Changes apply immediately but aren't saved, so copy values you like back into the config files. `Workspace.Gravity` (55) controls both jump height and ball flight.
 
 ## Layout
 
 ```
 src/
   shared/              -> ReplicatedStorage.Shared
-    Config/            tuning values (Court, Movement, Camera, Shooting, Ball, Motion, Skills)
-    MovementMath.luau  pure acceleration / smoothing math
+    Config/            tuning values (Court, Movement, Camera, Shooting, Ball, Motion, Skills, Footwork)
+    MovementMath.luau  pure acceleration / smoothing / directional speed math
+    GaitMath.luau      pure footwork decisions (stance spots, which foot steps, no crossing)
     ShotMath.luau      pure shot type, timing grade, aim error and arc math
     SkillMath.luau     pure flick detection and dribble-move choice
     Tunable.luau       Studio-only live tuning

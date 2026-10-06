@@ -9,8 +9,9 @@
 -- There's no button to hold: flick the mouse (or swipe on the trackpad) quickly, or draw a
 -- quick circle. Slow cursor movement does nothing.
 --   flick toward the empty hand → wide crossover
+--   flick toward the ball's hand → stab dribble (same hand, out to that side)
 --   flick backward              → step-back
---   draw a circle               → 360 spin (clockwise circle = clockwise spin)
+--   draw a circle (or a quick U) → 360 spin (clockwise circle = clockwise spin)
 --   H key                       → quick hand switch (Config/Ball.luau, SWITCH_...)
 -- Every move takes at most ONE short step (see FOOTWORK), so moves can be chained without
 -- carrying the player across the court. Live-tunable under ReplicatedStorage > Tuning > Skills.
@@ -28,17 +29,21 @@ local Skills = {
 	-- A gesture is judged once the cursor stops: this many seconds with no movement ends
 	-- it. Waiting for the end is what tells a circle apart from a flick (a circle is full
 	-- of flick-like pieces). Lower = flicks fire sooner, but a pause mid-circle splits it.
-	STROKE_END_GAP = 0.04,
+	-- Mouse readings arrive every ~0.017 s, with gaps of up to ~0.034 s when a frame
+	-- misses one, so this must stay comfortably above 0.034.
+	STROKE_END_GAP = 0.06,
 
 	-- CIRCLE DETECTION (the spin) -------------------------------------------------------
 
-	-- How far round the circle must go, degrees. 360 = a full circle; 300 forgives a
-	-- slightly short one.
-	CIRCLE_ANGLE = 190,
+	-- How far round the circle must go, degrees. 360 = a full circle, 180 = a "U".
+	-- Measured in Studio: quick competitive spin gestures (half circles in ~0.2 s) turn
+	-- 155-190°, slower ones 200-310°, while flicks turn only 5-15°. 120 sits well between
+	-- the two, so a rushed half circle still spins and a flick never does.
+	CIRCLE_ANGLE = 120,
 	-- ...within this many seconds. Higher = slower circles still count.
 	CIRCLE_WINDOW = 0.7,
-	-- The circle's path must be at least this long, in screen heights (0.25 ≈ a circle
-	-- 8% of the screen across), so small wobbles don't spin you.
+	-- The circle's path must be at least this long, in screen heights (0.20 ≈ a half
+	-- circle 13% of the screen across), so small wobbles don't spin you.
 	CIRCLE_MIN_LENGTH = 0.20,
 
 	-- WHICH MOVE --------------------------------------------------------------------------
@@ -112,25 +117,45 @@ local Skills = {
 	-- ~20° forward while moving, so this has to be fairly big to read as leaning back.
 	STEPBACK_LEAN = 12,
 
-	-- SPIN (draw a circle) ----------------------------------------------------------------
-	-- A reverse pivot, like a real spin move:
-	--   1. plant and get low; the dribbling hand pulls the ball in tight to its hip;
-	--   2. turn a full circle (the way you drew it) on the planted foot, sliding sideways.
-	--      As you turn, the dribbling hand pulls the ball ACROSS the front of the body (your
-	--      back is to the defender, so the body shields it); partway round the hands meet
-	--      on the ball and the other hand takes it on to its own hip;
-	--   3. coming out of the spin, the new hand pushes it into the dribble.
+	-- STAB DRIBBLE (flick toward the hand that has the ball) -----------------------------
+	-- The same hand pounds the ball hard out to its own side while the body leans into it
+	-- and takes its one step that way (see FOOTWORK). The ball bounces out wide, then comes
+	-- back up into the same hand as the body catches up with it.
+	STAB_BOUNCE_OUT = 2.0, -- where it bounces: this many studs out to the side of the hips...
+	STAB_BOUNCE_FORWARD = 1.0, -- ...and this many in front
+	STAB_PUSH_TIME = 0.12, -- seconds to pound it down and out to the bounce
+	STAB_RISE_TIME = 0.16, -- seconds for it to come back up into the hand
+	-- How much of the step goes forward: 0 = straight sideways, 1 = as much forward as sideways.
+	STAB_STEP_FORWARD = 0.15,
+	STAB_SIDE_LEAN = 10, -- degrees the body leans toward the ball's side
+	STAB_FORWARD_LEAN = 6, -- degrees the body bends forward (low) over the ball
+
+	-- SPIN (draw a circle, or just a quick half circle) -----------------------------------
+	-- A reverse pivot that stays legal: only ONE hand is ever on the ball, and the ball
+	-- always bounces before the other hand touches it (two hands on it at once ends the
+	-- dribble, so dribbling on afterwards would be a double dribble).
+	--   1. POUND – plant and get low while the ball hand pounds one hard dribble beside
+	--              its own foot;
+	--   2. PULL  – the body starts turning (the way you drew it) on the planted foot; the
+	--              same hand meets the ball on the way up, palm on its side (not under it),
+	--              and pulls it round tight against its hip, shielded by the body. The
+	--              free hand stays up as an arm bar;
+	--   3. DROP  – coming out of the turn, that hand pushes the ball down across the front
+	--              of the feet so it bounces just as the turn ends;
+	--   4. CATCH – the other hand takes it off the bounce and carries on dribbling.
 	-- A clockwise spin slides you left, counterclockwise slides you right.
-	SPIN_POCKET = Vector3.new(1, 2.3, 0.4), -- ball against a hip (out, height, forward); mirrored for the other hand
-	SPIN_HANDOFF_SPOT = Vector3.new(0, 2.2, 0.8), -- in front of the belly, where the hands swap
-	-- How far through the turn the hands swap (0 = start, 1 = end; 0.5 = halfway round,
-	-- back to the defender).
-	SPIN_HANDOFF_AT = 0.5,
-	SPIN_BOUNCE_FORWARD = 1, -- coming out: the new hand bounces it beside itself, this far in front
-	SPIN_GATHER_TIME = 0.1, -- seconds to pull the ball in to the hip
+	-- Ball spots: Vector3.new(out, height, forward) like the crossover's, `out` toward the
+	-- hand the ball started in.
+	SPIN_POUND_OUT = 1.2, -- 1. where the pound bounces: this many studs out to the ball's side...
+	SPIN_POUND_FORWARD = 0.5, -- ...and this many in front of the hips
+	SPIN_POCKET = Vector3.new(1, 2.3, 0.2), -- 2. where the hand holds it during the turn: against its hip
+	SPIN_BOUNCE_ACROSS = 0.3, -- 3. where it bounces coming out: this far over to the NEW hand's side...
+	SPIN_BOUNCE_FORWARD = 1, -- ...and this far in front of the hips
+	SPIN_GATHER_TIME = 0.1, -- seconds for the pound (planted, before the turn starts)
+	SPIN_PULL_TIME = 0.1, -- seconds for the ball to come up off the pound into the hand at the hip
 	SPIN_TIME = 0.4, -- seconds for the full turn
-	SPIN_DROP_TIME = 0.12, -- seconds for the new hand to push the ball down to its bounce
-	SPIN_RISE_TIME = 0.14, -- seconds for it to come back up into that hand
+	SPIN_DROP_TIME = 0.12, -- seconds to push it down to the bounce (ends as the turn ends)
+	SPIN_RISE_TIME = 0.14, -- seconds for it to come up off that bounce into the new hand
 	SPIN_DEGREES = 360, -- how far the body turns
 	SPIN_SLIDE = 4, -- studs slid sideways during the turn
 	SPIN_LEAN = 8, -- degrees the body bends forward (low) during the spin

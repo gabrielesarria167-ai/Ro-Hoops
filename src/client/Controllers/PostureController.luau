@@ -9,6 +9,8 @@
 --   * Eyes on the rim – a head IK (IKControl, "LookAt") turns the head to face the rim.
 --   * Body lean – tilts the whole body back (a fadeaway) or forward (a layup) around the
 --     hips, by rotating the root joint that connects the body to the HumanoidRootPart.
+--     On top of that, a stance lean (setStanceLean, set by LegController) bends the body
+--     forward into the dribbling stance; it eases out while shooting.
 --     The HumanoidRootPart itself stays upright, so physics and movement are unaffected.
 --     getBodyCFrame() gives the other controllers the leaned body's position, so the
 --     ball, hands and legs tilt with it.
@@ -23,6 +25,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Court = require(ReplicatedStorage.Shared.Config.Court)
+local Footwork = require(ReplicatedStorage.Shared.Config.Footwork)
 local Motion = require(ReplicatedStorage.Shared.Config.Motion)
 local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
@@ -65,6 +68,10 @@ local sideFrom = 0
 local sideGoal = 0
 local leanStartedAt = 0
 local leanDuration = 0
+-- The stance lean, degrees (negative = forward): eases toward `stanceGoal` every frame
+-- (0 while shooting) and is added to the lean above.
+local stanceLean = 0
+local stanceGoal = 0
 -- The root joint's rest pose: its pivot point at the hips, in HumanoidRootPart space. The
 -- lean rotates around it. Read from the character (see applyLean); this default is close.
 local hipPivot = CFrame.new(0, -1, 0)
@@ -162,6 +169,11 @@ local function currentLean(): number
 	return leanFrom + (leanGoal - leanFrom) * ease(progress)
 end
 
+-- The lean actually applied: the move/shot lean plus the stance lean.
+local function totalLean(): number
+	return currentLean() + stanceLean
+end
+
 -- How far the body is leaning sideways right now, degrees (positive = toward the right).
 local function currentSideLean(): number
 	local progress = if leanDuration > 0 then (os.clock() - leanStartedAt) / leanDuration else 1
@@ -206,7 +218,7 @@ local function applyLean(character: Model)
 		return -- R6, or the body isn't loaded yet
 	end
 
-	local degrees = currentLean()
+	local degrees = totalLean()
 	local sideDegrees = currentSideLean()
 	local rest = restPoses[piece]
 	if math.abs(degrees) < 0.01 and math.abs(sideDegrees) < 0.01 then
@@ -243,12 +255,18 @@ end
 -- by the current lean around the hips. Controllers measure the ball path, hand and foot
 -- positions from this instead of the root, so they tilt with the body.
 function PostureController.getBodyCFrame(rootCFrame: CFrame): CFrame
-	local degrees = currentLean()
+	local degrees = totalLean()
 	local sideDegrees = currentSideLean()
 	if math.abs(degrees) < 0.01 and math.abs(sideDegrees) < 0.01 then
 		return rootCFrame
 	end
 	return rootCFrame * hipPivot * leanRotation(degrees, sideDegrees) * hipPivot:Inverse()
+end
+
+-- Sets the stance lean the body eases toward, degrees (negative = forward). LegController
+-- calls it every frame with the dribbling stance's lean (Config/Footwork.luau).
+function PostureController.setStanceLean(degrees: number)
+	stanceGoal = degrees
 end
 
 -- Turns the shooting posture on (shot started) or off (landed / cancelled).
@@ -265,6 +283,10 @@ local function update(dt: number)
 	if not parts then
 		return
 	end
+
+	-- Ease the stance lean (straight up while shooting: a shooter stays tall).
+	local stanceTarget = if shooting then 0 else stanceGoal
+	stanceLean += (stanceTarget - stanceLean) * MovementMath.smoothingAlpha(Footwork.CROUCH_SHARPNESS, dt)
 
 	applyLean(parts.character)
 
@@ -294,6 +316,7 @@ function PostureController.start()
 		table.clear(mutedTracks)
 		table.clear(restPoses)
 		leanFrom, leanGoal, leanDuration = 0, 0, 0
+		stanceLean, stanceGoal = 0, 0
 		sideFrom, sideGoal = 0, 0
 		destroyHead()
 		nextRetryAt = 0

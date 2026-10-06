@@ -9,7 +9,7 @@
 --   Controllers/CameraController    the fixed rim-facing camera
 --   Controllers/BallController      dribble, gather path, shot flight, make/miss detection
 --   Controllers/ArmController       hands on the ball (arm IK) and the follow-through
---   Controllers/LegController       the knee dip and straight legs in the air (leg IK)
+--   Controllers/LegController       footwork (stance, shuffle, move steps), the shot's dip and air legs
 --   Controllers/PostureController   upright torso and eyes on the rim during a shot
 --   Controllers/ShotController      the E key: shot type, timing, aim
 --   Controllers/SkillController     mouse/trackpad flicks → dribble moves (crossover)
@@ -40,6 +40,7 @@ Tunable.bind("Shooting", require(Config.Shooting))
 Tunable.bind("Ball", require(Config.Ball))
 Tunable.bind("Motion", require(Config.Motion))
 Tunable.bind("Skills", require(Config.Skills))
+Tunable.bind("Footwork", require(Config.Footwork))
 
 -- Start order matters: character tracking first, then input before the systems that read it.
 CharacterRef.start()

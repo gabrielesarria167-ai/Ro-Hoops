@@ -18,9 +18,11 @@ export type Hand = "Right" | "Left"
 --   HandSwitch – a quick, simple change of hands (the H key)
 --   Crossover  – the wide, Allen Iverson style crossover (flick toward the empty hand)
 --   StepBack   – one step back, pulling the ball with you (flick backward)
+--   Stab       – a hard dribble out to the ball hand's own side, stepping that way (flick
+--                toward the hand that has the ball)
 --   Spin       – a 360° reverse-pivot spin, switching hands during the spin
 --                (draw a circle)
-export type Move = "HandSwitch" | "Crossover" | "StepBack" | "Spin"
+export type Move = "HandSwitch" | "Crossover" | "StepBack" | "Spin" | "Stab"
 
 -- One cursor reading: the clock time and where the cursor was. Positions are measured in
 -- screen heights (so a flick is the same size on any screen) with y pointing UP.
@@ -49,6 +51,11 @@ export type MoveConfig = {
 -- Segments shorter than this (screen heights) are merged with the next one when measuring
 -- how much the path turns, so tiny jitters don't count as turning.
 local MIN_SEGMENT = 0.004
+-- A single turn sharper than this (degrees) between two segments is the cursor doubling
+-- back (a zigzag or a flick and its return), not a circle bending round, so it isn't
+-- counted. Real circles bend gradually: recorded spin gestures never turned more than
+-- ~60° between readings.
+local REVERSAL_ANGLE = math.rad(135)
 
 -- 1. Looks at the cursor's recent path (`samples`, oldest first) and returns the flick it
 -- made as a vector in screen heights (x = right, y = up), or nil if there was no flick.
@@ -79,7 +86,9 @@ end
 -- drew a circle counterclockwise (on screen), -1 if clockwise, or nil if it didn't.
 -- A circle = the path's direction turned through at least CIRCLE_ANGLE degrees in one
 -- direction, along a path at least CIRCLE_MIN_LENGTH screen heights long (so small
--- wobbles don't count). Turning one way and then back cancels out.
+-- wobbles don't count). It doesn't have to be a full circle: a quick half circle (a "U")
+-- counts too, since there's no time for full circles in a real game. Turning one way and
+-- then back cancels out, and sharp reversals (REVERSAL_ANGLE) don't count at all.
 function SkillMath.detectCircle(samples: { Sample }, config: CircleConfig): number?
 	local count = #samples
 	if count < 3 then
@@ -104,7 +113,10 @@ function SkillMath.detectCircle(samples: { Sample }, config: CircleConfig): numb
 						-- Signed angle from the previous direction to this one.
 						local cross = previousX * dy - previousY * dx
 						local dot = previousX * dx + previousY * dy
-						turned += math.atan2(cross, dot)
+						local angle = math.atan2(cross, dot)
+						if math.abs(angle) < REVERSAL_ANGLE then
+							turned += angle
+						end
 					end
 					length += segment
 					previousX, previousY = dx, dy
@@ -125,19 +137,17 @@ end
 -- is where the ball is now.
 --   * Flick mostly sideways, toward the empty hand → Crossover (the wide one; the ball
 --     goes where you flicked it). The quick HandSwitch is on the H key instead.
+--   * Flick mostly sideways, toward the hand that has the ball → Stab (same hand, out to
+--     that side).
 --   * Flick mostly backward → StepBack.
---   * Anything else → nil (forward is kept free for a later move; toward the ball's own
---     side does nothing).
+--   * Flick mostly forward → nil (kept free for a later move).
 function SkillMath.chooseMove(towardRight: number, towardForward: number, hand: Hand, config: MoveConfig): Move?
 	if math.abs(towardRight) < math.abs(towardForward) * config.SIDE_DOMINANCE then
 		-- Mostly forward or back.
 		return if towardForward < 0 then "StepBack" else nil
 	end
 	local side: Hand = if towardRight > 0 then "Right" else "Left"
-	if side ~= hand then
-		return "Crossover"
-	end
-	return nil
+	return if side ~= hand then "Crossover" else "Stab"
 end
 
 return SkillMath

@@ -61,4 +61,24 @@ function MovementMath.smoothingAlpha(sharpness: number, dt: number): number
 	return 1 - math.exp(-sharpness * dt)
 end
 
+-- How much of the top speed the player gets when moving in a direction relative to the
+-- way they face (the rim). `towardRight` / `towardForward` = the movement direction in the
+-- player's own terms (any length). Like a real player who keeps facing the basket:
+-- straight ahead = full speed (1), straight sideways (a shuffle) = `sideScale`, straight
+-- back (a backpedal) = `backScale`, diagonals in between. No direction = 1.
+function MovementMath.directionalSpeedScale(
+	towardRight: number,
+	towardForward: number,
+	sideScale: number,
+	backScale: number
+): number
+	local sideSquared, forwardSquared = towardRight * towardRight, towardForward * towardForward
+	local total = sideSquared + forwardSquared
+	if total < 1e-9 then
+		return 1
+	end
+	local straightScale = if towardForward >= 0 then 1 else backScale
+	return (forwardSquared * straightScale + sideSquared * sideScale) / total
+end
+
 return MovementMath

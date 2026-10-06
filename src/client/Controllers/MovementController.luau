@@ -8,10 +8,14 @@
 -- acceleration with ours. Tuning values: src/shared/Config/Movement.luau.
 --
 -- Input is relative to the screen: W / up always moves up the screen, toward the rim.
+-- The body always faces the rim (faceRim): the Humanoid's own turning toward the movement
+-- direction (AutoRotate) is switched off, so A / D shuffle sideways and S backpedals.
+-- SkillController's spin overrides the facing while it turns (it runs later each frame).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Court = require(ReplicatedStorage.Shared.Config.Court)
 local Motion = require(ReplicatedStorage.Shared.Config.Motion)
 local Movement = require(ReplicatedStorage.Shared.Config.Movement)
 local MovementMath = require(ReplicatedStorage.Shared.MovementMath)
@@ -23,6 +27,9 @@ local MovementController = {}
 -- The player's current flat velocity (y is always 0), studs/s. Other systems read it
 -- through getVelocity(), e.g. to pick the shot type or speed up the dribble.
 local velocity = Vector3.zero
+-- The velocity `velocity` is easing toward (the keys' wish, or the override). Zero while
+-- slowing to a stop. LegController uses it to place feet where the body is heading.
+local targetVelocity = Vector3.zero
 -- When set, input is ignored and the player's velocity eases toward this one (at
 -- Motion.DRIFT_BLEND_RATE, so momentum carries into the shot). Used by ShotController for
 -- shot drift (pull-up stops, fadeaways, layup drives) and by SkillController for the
@@ -44,16 +51,37 @@ local function screenAxes(): (Vector3, Vector3)
 	return forward, forward:Cross(Vector3.yAxis)
 end
 
+-- Turns the body a little further toward the rim (called every frame), keeping its position.
+local function faceRim(parts: CharacterRef.Parts, dt: number)
+	local humanoid = parts.humanoid
+	-- Off = the Humanoid never turns the body toward where it's walking; we do the turning.
+	-- Re-checked every frame because a respawn brings a new Humanoid with it on.
+	if humanoid.AutoRotate then
+		humanoid.AutoRotate = false
+	end
+	local root = parts.root
+	local position = root.Position
+	local toRim = Vector3.new(Court.RIM_POSITION.X - position.X, 0, Court.RIM_POSITION.Z - position.Z)
+	if toRim.Magnitude < 0.5 then
+		return -- standing right under the rim: no clear direction, keep the current facing
+	end
+	local facingRim = CFrame.lookAt(position, position + toRim)
+	local alpha = MovementMath.smoothingAlpha(Movement.FACE_RIM_SHARPNESS, dt)
+	root.CFrame = root.CFrame:Lerp(facingRim, alpha)
+end
+
 -- Runs every frame before the camera updates. `dt` = seconds since the last frame.
 local function step(dt: number)
 	local parts = CharacterRef.get()
 	if not parts or parts.humanoid.Health <= 0 then
 		velocity = Vector3.zero
+		targetVelocity = Vector3.zero
 		return
 	end
 
 	local forcedVelocity = override
 	if forcedVelocity then
+		targetVelocity = Vector3.new(forcedVelocity.X, 0, forcedVelocity.Z)
 		local rate = overrideRate or Motion.DRIFT_BLEND_RATE -- same rate whether speeding up, slowing or turning
 		local vx, vz =
 			MovementMath.stepVelocity(velocity.X, velocity.Z, forcedVelocity.X, forcedVelocity.Z, rate, rate, rate, dt)
@@ -62,7 +90,18 @@ local function step(dt: number)
 		local intent = InputController.getMoveIntent() -- which keys are held
 		local speed = if InputController.isRunning() then Movement.RUN_SPEED else Movement.WALK_SPEED
 		local forward, right = screenAxes()
-		local target = (right * intent.X + forward * intent.Y) * speed -- the velocity we want
+		local direction = right * intent.X + forward * intent.Y
+		-- Slower when shuffling sideways or backpedalling (the body faces the rim), see
+		-- Movement.SIDE_SPEED_SCALE / BACK_SPEED_SCALE.
+		local look, side = parts.root.CFrame.LookVector, parts.root.CFrame.RightVector
+		speed *= MovementMath.directionalSpeedScale(
+			direction:Dot(side),
+			direction:Dot(look),
+			Movement.SIDE_SPEED_SCALE,
+			Movement.BACK_SPEED_SCALE
+		)
+		local target = direction * speed -- the velocity we want
+		targetVelocity = target
 		local vx, vz = MovementMath.stepVelocity(
 			velocity.X,
 			velocity.Z,
@@ -84,6 +123,8 @@ local function step(dt: number)
 		parts.humanoid.WalkSpeed = speed
 		parts.humanoid:Move(velocity / speed, false)
 	end
+
+	faceRim(parts, dt)
 end
 
 -- The screen's "up" and "right" directions flattened onto the floor (world space). Used
@@ -93,6 +134,12 @@ function MovementController.getScreenAxes(): (Vector3, Vector3)
 end
 
 -- The player's current flat velocity, studs/s.
+-- The flat velocity the player is speeding up / slowing down toward, studs/s (zero when
+-- coming to a stop).
+function MovementController.getTargetVelocity(): Vector3
+	return targetVelocity
+end
+
 function MovementController.getVelocity(): Vector3
 	return velocity
 end
@@ -107,6 +154,7 @@ end
 function MovementController.start()
 	CharacterRef.onSpawn(function()
 		velocity = Vector3.zero
+		targetVelocity = Vector3.zero
 		override = nil
 		overrideRate = nil
 	end)

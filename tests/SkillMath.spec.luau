@@ -88,6 +88,27 @@ t.describe("SkillMath.detectCircle", function()
 		t.equal(SkillMath.detectCircle(samples, CIRCLE), nil)
 	end)
 
+	-- The game's real settings: a quick half circle (a "U") is enough.
+	local GAME_CIRCLE = { CIRCLE_ANGLE = 120, CIRCLE_WINDOW = 0.7, CIRCLE_MIN_LENGTH = 0.2 }
+
+	t.test("a quick half circle (~170° in 0.2 s, like recorded in Studio) is a spin", function()
+		t.equal(SkillMath.detectCircle(circle(0.15, 170 / 360, 0.2, -1), GAME_CIRCLE), -1)
+		t.equal(SkillMath.detectCircle(circle(0.15, 170 / 360, 0.2, 1), GAME_CIRCLE), 1)
+	end)
+
+	t.test("a straight flick is never a spin with the game's settings", function()
+		t.equal(SkillMath.detectCircle(path(3, 0, 8), GAME_CIRCLE), nil)
+	end)
+
+	t.test("a flick and a sharp return (doubling back) is not a spin", function()
+		local samples = path(2, 0, 8)
+		local turnX = samples[#samples].x
+		for i = 1, 8 do
+			table.insert(samples, { t = (8 + i) / 60, x = turnX - 2 * i / 60, y = 0.5 + 0.002 * i })
+		end
+		t.equal(SkillMath.detectCircle(samples, GAME_CIRCLE), nil)
+	end)
+
 	t.test("a circle drawn too slowly (outside the window) does not count", function()
 		t.equal(SkillMath.detectCircle(circle(0.08, 1, 2, 1), CIRCLE), nil)
 	end)
@@ -99,9 +120,9 @@ t.describe("SkillMath.chooseMove", function()
 		t.equal(SkillMath.chooseMove(1, 0, "Left", MOVE), "Crossover")
 	end)
 
-	t.test("flicking toward the hand that has the ball does nothing", function()
-		t.equal(SkillMath.chooseMove(1, 0, "Right", MOVE), nil)
-		t.equal(SkillMath.chooseMove(-1, 0, "Left", MOVE), nil)
+	t.test("flicking toward the hand that has the ball is a stab dribble", function()
+		t.equal(SkillMath.chooseMove(1, 0, "Right", MOVE), "Stab")
+		t.equal(SkillMath.chooseMove(-1, 0, "Left", MOVE), "Stab")
 	end)
 
 	t.test("a mostly backward flick is a step-back, whichever hand has the ball", function()

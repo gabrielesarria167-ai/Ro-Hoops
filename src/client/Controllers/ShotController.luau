@@ -97,7 +97,7 @@ local function begin()
 	if not parts or parts.humanoid.FloorMaterial == Enum.Material.Air then
 		return
 	end
-	local humanoid, root = parts.humanoid, parts.root
+	local root = parts.root
 
 	-- Split the player's velocity into "toward the rim" and "across the court" parts.
 	local distance, toward, lateral = rimAxes(root.Position)
@@ -133,10 +133,6 @@ local function begin()
 		drift = toward * config.DRIFT + lateral * side * config.LATERAL_DRIFT
 	end
 	MovementController.setOverride(drift)
-
-	-- From here on we turn the body ourselves (turnTowardRim), so stop the Humanoid
-	-- turning toward its movement direction.
-	humanoid.AutoRotate = false
 
 	-- config.MOTION picks the jump shot or layup version of the legs, ball path and hands.
 	LegController.startDip(dipTime, config.MOTION)
@@ -201,10 +197,6 @@ local function land()
 	LegController.land()
 	PostureController.setShooting(false)
 	PostureController.leanTo(0, Motion.LEAN_RECOVER_TIME) -- straighten back up
-	local parts = CharacterRef.get()
-	if parts then
-		parts.humanoid.AutoRotate = true
-	end
 end
 
 -- Runs every frame during a shot: turns toward the rim, jumps when it's time, fills the

@@ -76,4 +76,28 @@ t.describe("MovementMath.smoothingAlpha", function()
 	end)
 end)
 
+t.describe("MovementMath.directionalSpeedScale", function()
+	t.test("full speed straight ahead", function()
+		t.near(MovementMath.directionalSpeedScale(0, 1, 0.8, 0.65), 1, 1e-9)
+	end)
+
+	t.test("side scale for a sideways shuffle, either way", function()
+		t.near(MovementMath.directionalSpeedScale(1, 0, 0.8, 0.65), 0.8, 1e-9)
+		t.near(MovementMath.directionalSpeedScale(-1, 0, 0.8, 0.65), 0.8, 1e-9)
+	end)
+
+	t.test("back scale for a backpedal", function()
+		t.near(MovementMath.directionalSpeedScale(0, -1, 0.8, 0.65), 0.65, 1e-9)
+	end)
+
+	t.test("diagonals blend, and the input's length doesn't matter", function()
+		t.near(MovementMath.directionalSpeedScale(1, 1, 0.8, 0.65), 0.9, 1e-9)
+		t.near(MovementMath.directionalSpeedScale(3, -3, 0.8, 0.65), 0.725, 1e-9)
+	end)
+
+	t.test("no direction = full speed", function()
+		t.near(MovementMath.directionalSpeedScale(0, 0, 0.8, 0.65), 1, 1e-9)
+	end)
+end)
+
 return nil

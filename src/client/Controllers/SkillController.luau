@@ -3,13 +3,21 @@
 -- Inputs:
 --   H key                          – HandSwitch: a quick, simple change of hands.
 --   Flick toward the empty hand    – Crossover: the wide, Allen Iverson style crossover.
+--   Flick toward the ball's hand   – Stab: a hard dribble out to that hand's side,
+--                                    stepping that way.
 --   Flick backward                 – StepBack: one step back, pulling the ball with you.
---   Draw a circle                  – Spin: a 360 reverse pivot the way you drew it, handing
---                                    the ball to the other hand during the turn.
+--   Draw a circle (a quick half     – Spin: a 360 reverse pivot the way you drew it; the
+--   circle is enough)                  ball hand pulls the ball round, bounces it as the
+--                                    turn ends, and the other hand takes it off the bounce.
 -- No button to hold; slow cursor movement does nothing.
 --
+-- The mouse is locked in the middle of the screen (crosshair style, see lockMouse; the
+-- crosshair itself is drawn by HudController). It can't move, but Roblox still reports
+-- how far it WOULD have moved (InputObject.Delta), so every movement is added to a virtual
+-- cursor (cursorX / cursorY) and the gestures are read from that path.
+--
 -- Gestures:
---   1. every cursor movement is recorded (in screen heights, so any screen size works);
+--   1. every virtual cursor movement is recorded (in screen heights, so any screen size works);
 --   2. once the cursor stops (STROKE_END_GAP with no movement) the whole stroke is judged:
 --      SkillMath.detectCircle first (a circle is a spin), then SkillMath.detectSwipe (a
 --      fast straight stroke is a flick). Judging the whole stroke is what stops the start
@@ -23,21 +31,27 @@
 -- The body follows a short timeline of "beats" per move (values in Config/Skills.luau):
 --   Crossover – SELL: plant, lean over the ball and toward it. EXPLODE: whip the lean to
 --               the new side and take one step that way.
+--   Stab      – lean into the ball's side and step that way as the ball is pounded out.
 --   StepBack  – plant, lean back, one step straight back.
---   Spin      – plant, bend low, turn a full circle while sliding a short way sideways.
--- Every move takes at most one step, then movement goes back to the keys. The player keeps
--- facing the same way (apart from the spin's turn) during the move, and afterwards until
--- a movement key is pressed.
+--   Spin      – plant (while the ball is pounded), bend low, turn a full circle while
+--               sliding a short way sideways.
+-- The feet are placed by LegController, following each move's real-life footwork
+-- (Config/Footwork.luau, MOVE FOOTWORK): e.g. the crossover's jab and push-off, the
+-- step-back's "1-2" landing, the spin's pivot foot and swing leg.
+-- Every move takes at most one step, then movement goes back to the keys. The body keeps
+-- facing the rim throughout (MovementController.faceRim), apart from the spin's turn,
+-- which sets the facing itself every frame and ends facing the same way it started.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Footwork = require(ReplicatedStorage.Shared.Config.Footwork)
 local Skills = require(ReplicatedStorage.Shared.Config.Skills)
 local SkillMath = require(ReplicatedStorage.Shared.SkillMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
 local BallController = require(script.Parent.BallController)
-local InputController = require(script.Parent.InputController)
+local LegController = require(script.Parent.LegController)
 local MovementController = require(script.Parent.MovementController)
 local PostureController = require(script.Parent.PostureController)
 
@@ -71,9 +85,9 @@ local SkillController = {}
 -- The current stroke's cursor readings, oldest first (at most CIRCLE_WINDOW seconds' worth).
 local samples: { SkillMath.Sample } = {}
 local body: BodyMove? = nil -- the dribble move's body motion, or nil
--- True after a move until the player presses a movement key: the body keeps facing the
--- same way meanwhile, instead of swinging round to face the leftover momentum.
-local holdFacing = false
+-- The virtual cursor, pixels: where the mouse would be if it weren't locked in the middle.
+-- Only changes between readings matter, so it starts at 0, 0 and is never reset.
+local cursorX, cursorY = 0, 0
 
 -- A flat world velocity relative to `rootCFrame`: `side` studs/s toward its right
 -- (negative = left) plus `forward` studs/s the way it faces.
@@ -93,14 +107,51 @@ local function releaseFeet() -- movement back to the keys (no key held = slow to
 	MovementController.setOverride(nil)
 end
 
+-- Footwork helpers (LegController places the feet; Config/Footwork.luau).
+-- Half the stance width: how far each foot normally is from the middle of the hips.
+local function halfStance(): number
+	return Footwork.STANCE_WIDTH / 2
+end
+local function sideName(sign: number): SkillMath.Hand
+	return if sign > 0 then "Right" else "Left"
+end
+-- Takes the feet over for a move: no automatic steps, hips `extraCrouch` studs lower.
+local function scriptFeet(extraCrouch: number)
+	LegController.setScripted(true)
+	LegController.setMoveCrouch(extraCrouch)
+end
+-- Gives the feet back to the automatic footwork (which then tidies up the stance).
+local function unscriptFeet()
+	LegController.setScripted(false)
+	LegController.setMoveCrouch(0)
+end
+-- Steps the foot on `sign`'s side (+1 right, -1 left) so it lands beside the hips (as
+-- they are when it lands): the normal stance width plus `out` studs further out that side,
+-- `forward` studs ahead. `frame` / `bulge`: see LegController.stepFoot.
+local function stepFoot(
+	sign: number,
+	out: number,
+	forward: number,
+	duration: number,
+	lift: number,
+	frame: CFrame?,
+	bulge: Vector3?
+)
+	local offset = Vector3.new(sign * (halfStance() + out), 0, forward)
+	LegController.stepFoot(sideName(sign), offset, duration, lift, frame, bulge)
+end
+
 -- The body's beats for a move. `fromSign` = +1 if the ball is in the right hand, -1 if
 -- left; `spinSign` = +1 for a counterclockwise spin, -1 for clockwise (spins only).
 local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number): ({ Beat }, number, Turn?)
+	local stagger = Footwork.STAGGER / 2 -- the ball-side foot ends this far back, the other this far forward
 	if move == "Crossover" then
 		local toSign = -fromSign
 		local sell = Skills.WIDE_SELL_TIME
+		local trailLeaves = sell + Footwork.CROSS_TRAIL_DELAY
 		return {
-			{ -- SELL: plant, lean over the ball and toward it.
+			{ -- SELL: plant, crouch low and lean over the ball and toward it; the ball-side
+				-- foot jabs out wide (the fake).
 				at = 0,
 				run = function()
 					plant()
@@ -109,9 +160,19 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 						sell,
 						fromSign * Skills.WIDE_SELL_SIDE_LEAN
 					)
+					scriptFeet(Footwork.CROSS_CROUCH)
+					stepFoot(
+						fromSign,
+						Footwork.CROSS_JAB_OUT,
+						Footwork.CROSS_JAB_FORWARD,
+						Footwork.CROSS_JAB_TIME,
+						Footwork.MIN_LIFT * 2
+					)
 				end,
 			},
-			{ -- EXPLODE: as the ball is pounded across, whip the lean over and step that way.
+			{ -- EXPLODE: as the ball is pounded across, whip the lean over and push off the
+				-- jab foot: the new-side foot steps out the new way (it's the new ball hand's
+				-- side, so it ends slightly back)...
 				at = sell,
 				run = function(parts)
 					PostureController.leanTo(
@@ -120,28 +181,93 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 						toSign * Skills.WIDE_CROSS_SIDE_LEAN
 					)
 					stepToward(bodyVelocity(parts.root.CFrame, toSign, Skills.WIDE_STEP_FORWARD))
+					stepFoot(toSign, 0, -stagger, Footwork.CROSS_LEAD_TIME, Footwork.MAX_LIFT * 0.7)
+				end,
+			},
+			{ -- ...and the push foot follows (a quick bound).
+				at = trailLeaves,
+				run = function()
+					stepFoot(fromSign, 0, stagger, Footwork.CROSS_TRAIL_TIME, Footwork.MAX_LIFT * 0.6)
 				end,
 			},
 			{ at = sell + Skills.STEP_TIME, run = releaseFeet },
+			{ at = trailLeaves + Footwork.CROSS_TRAIL_TIME, run = unscriptFeet },
 		},
 			sell + Skills.WIDE_PUSH_TIME + Skills.WIDE_RISE_TIME + Skills.WIDE_RECOVER_TIME
+	elseif move == "Stab" then
+		local stabTime = Skills.STAB_PUSH_TIME + Skills.STAB_RISE_TIME
+		return {
+			{ -- Lean into the ball's side and step that way, straight away: the ball-side
+				-- foot stabs out to that side...
+				at = 0,
+				run = function(parts)
+					PostureController.leanTo(
+						-Skills.STAB_FORWARD_LEAN,
+						Skills.STAB_PUSH_TIME,
+						fromSign * Skills.STAB_SIDE_LEAN
+					)
+					stepToward(bodyVelocity(parts.root.CFrame, fromSign, Skills.STAB_STEP_FORWARD))
+					scriptFeet(Footwork.STAB_CROUCH)
+					stepFoot(
+						fromSign,
+						Footwork.STAB_OUT,
+						Footwork.STAB_FORWARD,
+						Footwork.STAB_LEAD_TIME,
+						Footwork.MAX_LIFT * 0.5
+					)
+				end,
+			},
+			{ -- ...and the other foot follows it (push, pull, recover; never crossing).
+				at = Footwork.STAB_TRAIL_DELAY,
+				run = function()
+					stepFoot(-fromSign, 0, stagger, Footwork.STAB_TRAIL_TIME, Footwork.MIN_LIFT * 2)
+				end,
+			},
+			{ at = Skills.STEP_TIME, run = releaseFeet },
+			{ at = Footwork.STAB_TRAIL_DELAY + Footwork.STAB_TRAIL_TIME, run = unscriptFeet },
+		},
+			math.max(stabTime, Skills.STEP_TIME)
 	elseif move == "StepBack" then
 		local plantTime = Skills.STEPBACK_PLANT_TIME
+		local frontLeaves = plantTime + Footwork.STEPBACK_FRONT_FOOT_DELAY
 		return {
-			{ -- Plant and lean back.
+			{ -- Plant the front (off) foot hard and lean back.
 				at = 0,
 				run = function()
 					plant()
 					PostureController.leanTo(Skills.STEPBACK_LEAN, plantTime + Skills.STEP_TIME, 0)
+					scriptFeet(Footwork.STEPBACK_CROUCH)
+					stepFoot(
+						-fromSign,
+						0,
+						Footwork.STEPBACK_PLANT_FORWARD,
+						math.max(plantTime, 0.04),
+						Footwork.MIN_LIFT
+					)
 				end,
 			},
-			{ -- One step straight back.
+			{ -- Push back off it: one step straight back, landing on both feet, back (ball-
+				-- side) foot first...
 				at = plantTime,
 				run = function(parts)
 					stepToward(bodyVelocity(parts.root.CFrame, 0, -1))
+					stepFoot(fromSign, 0, -stagger, Footwork.STEPBACK_BACK_FOOT_TIME, Footwork.STEPBACK_LIFT)
+				end,
+			},
+			{ -- ...then the front foot ("1-2").
+				at = frontLeaves,
+				run = function()
+					stepFoot(-fromSign, 0, stagger, Footwork.STEPBACK_FRONT_FOOT_TIME, Footwork.STEPBACK_LIFT * 0.8)
 				end,
 			},
 			{ at = plantTime + Skills.STEP_TIME, run = releaseFeet },
+			{
+				at = math.max(
+					plantTime + Footwork.STEPBACK_BACK_FOOT_TIME,
+					frontLeaves + Footwork.STEPBACK_FRONT_FOOT_TIME
+				),
+				run = unscriptFeet,
+			},
 		},
 			math.max(Skills.STEPBACK_PULL_TIME + Skills.STEPBACK_RISE_TIME, plantTime + Skills.STEP_TIME)
 	elseif move == "Spin" then
@@ -154,24 +280,50 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 			duration = spinTime,
 			radians = spinSign * math.rad(Skills.SPIN_DEGREES),
 		}
+		local swingLands = Footwork.SPIN_SWING_LANDS_AT * spinTime
+		local pivotLeaves = gather + Footwork.SPIN_PIVOT_LIFTS_AT * spinTime
+		local pivotTime = math.max(Footwork.SPIN_PIVOT_LANDS_AT - Footwork.SPIN_PIVOT_LIFTS_AT, 0.05) * spinTime
 		return {
 			{ -- Plant and get low while the ball comes in to the hip.
 				at = 0,
 				run = function()
 					plant()
 					PostureController.leanTo(-Skills.SPIN_LEAN, gather, 0)
+					scriptFeet(Footwork.SPIN_CROUCH)
 				end,
 			},
 			{ -- Turn (see `turn`) while sliding sideways, in the direction faced at the start.
+				-- Pivot on the foot on the side you're sliding toward; the other leg swings
+				-- round behind you and lands just past the hips, across the pivot foot.
+				-- (Feet are placed relative to the starting facing: the body turns underneath.)
 				at = gather,
 				run = function()
 					local slide = bodyVelocity(turn.from, slideSign, 0) * (Skills.SPIN_SLIDE / math.max(spinTime, 0.05))
 					MovementController.setOverride(slide, Skills.STEP_RATE)
+					local behind = -bodyVelocity(turn.from, 0, 1) * Footwork.SPIN_SWING_BULGE
+					stepFoot(
+						-slideSign,
+						-(halfStance() + Footwork.SPIN_SWING_PAST), -- lands SPIN_SWING_PAST over the middle
+						0,
+						swingLands,
+						Footwork.SPIN_LIFT,
+						turn.from,
+						behind
+					)
+				end,
+			},
+			{ -- The pivot foot comes off the floor and steps through to finish the stance.
+				at = pivotLeaves,
+				run = function()
+					stepFoot(slideSign, 0, 0, pivotTime, Footwork.SPIN_LIFT * 0.7, turn.from)
 				end,
 			},
 			{ at = gather + spinTime, run = releaseFeet },
+			{ at = math.max(gather + spinTime, pivotLeaves + pivotTime), run = unscriptFeet },
 		},
-			gather + spinTime + Skills.SPIN_DROP_TIME + Skills.SPIN_RISE_TIME,
+			-- The ball's exit bounce lands as the turn ends; the move is over once the new
+			-- hand has it (BallController, Spin).
+			gather + spinTime + Skills.SPIN_RISE_TIME,
 			turn
 	end
 	return {}, 0, nil -- HandSwitch: the body doesn't move
@@ -192,8 +344,11 @@ local function startMove(move: SkillMath.Move, spinSign: number?)
 	if turn then
 		turn.from = parts.root.CFrame.Rotation
 	end
-	-- We control the facing during the move.
-	parts.humanoid.AutoRotate = false
+	-- Beats run in time order (tuning can reorder them), and the move lasts until its last one.
+	table.sort(beats, function(a, b)
+		return a.at < b.at
+	end)
+	total = math.max(total, beats[#beats].at)
 	body = { startedAt = os.clock(), beats = beats, nextBeat = 1, total = total, turn = turn }
 end
 
@@ -203,17 +358,6 @@ local function step()
 	if not parts then
 		return
 	end
-	-- A shot took over (it handles turning itself), or the player pressed a movement key:
-	-- turning toward the movement direction can resume.
-	if holdFacing then
-		if BallController.getMode() ~= "Dribble" then
-			holdFacing = false
-		elseif InputController.getMoveIntent().Magnitude > 0 then
-			holdFacing = false
-			parts.humanoid.AutoRotate = true
-		end
-	end
-
 	local current = body
 	if not current then
 		return
@@ -223,6 +367,7 @@ local function step()
 	if BallController.getMode() ~= "Dribble" then
 		body = nil
 		PostureController.leanTo(0, Skills.WIDE_LEAN_RECOVER_TIME)
+		unscriptFeet()
 		return
 	end
 
@@ -242,12 +387,11 @@ local function step()
 	end
 
 	if elapsed >= current.total then
-		-- Done: straighten up, movement back to the keys. Keep facing the same way until a
-		-- movement key is pressed (see holdFacing).
+		-- Done: straighten up, movement and feet back to normal.
 		body = nil
 		PostureController.leanTo(0, Skills.WIDE_LEAN_RECOVER_TIME)
 		releaseFeet()
-		holdFacing = true
+		unscriptFeet()
 	end
 end
 
@@ -282,12 +426,15 @@ local function endStroke()
 	end
 end
 
--- Records a cursor position as part of the current stroke.
-local function onCursorMoved(position: Vector3)
+-- Moves the virtual cursor by one mouse movement (`delta`, pixels, y pointing down) and
+-- records where it ends up as part of the current stroke.
+local function onCursorMoved(delta: Vector3)
+	cursorX += delta.X
+	cursorY += delta.Y
 	local screenHeight = math.max(workspace.CurrentCamera.ViewportSize.Y, 1)
 	local now = os.clock()
 	-- Screen y grows downward; flip it so up is positive.
-	table.insert(samples, { t = now, x = position.X / screenHeight, y = -position.Y / screenHeight })
+	table.insert(samples, { t = now, x = cursorX / screenHeight, y = -cursorY / screenHeight })
 	-- Keep only as much as the longest check needs.
 	local keep = math.max(Skills.CIRCLE_WINDOW, Skills.SWIPE_WINDOW)
 	while #samples > 0 and now - samples[1].t > keep do
@@ -295,10 +442,43 @@ local function onCursorMoved(position: Vector3)
 	end
 end
 
+-- Keeps the mouse locked in the middle of the screen with the system pointer hidden (the
+-- HUD draws a crosshair there instead). Run every frame: Roblox unlocks the mouse while its
+-- menu (Esc) is open, and this locks it again as soon as the game has it back.
+local function lockMouse()
+	if UserInputService.MouseBehavior ~= Enum.MouseBehavior.LockCenter then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+	end
+	if UserInputService.MouseIconEnabled then
+		UserInputService.MouseIconEnabled = false
+	end
+end
+
+-- Performs `move` straight away, as if its gesture had been made (`spinSign` +1 =
+-- counterclockwise spin, -1 = clockwise; spins only). For other input methods, e.g. a
+-- gamepad later.
+function SkillController.perform(move: SkillMath.Move, spinSign: number?)
+	startMove(move, spinSign)
+end
+
 function SkillController.start()
+	-- Studio only: ReplicatedStorage.RoHoopsPerformMove lets you try a move from the command
+	-- bar while playing (client view), e.g.
+	--   game.ReplicatedStorage.RoHoopsPerformMove:Fire("Spin", -1)
+	if RunService:IsStudio() then
+		local performEvent = Instance.new("BindableEvent")
+		performEvent.Name = "RoHoopsPerformMove"
+		performEvent.Event:Connect(function(move: SkillMath.Move, spinSign: number?)
+			SkillController.perform(move, spinSign)
+		end)
+		performEvent.Parent = ReplicatedStorage
+	end
+
 	UserInputService.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			onCursorMoved(input.Position)
+			-- Delta = how far the mouse moved this time; it still works while the mouse is
+			-- locked (Position doesn't: it stays in the middle).
+			onCursorMoved(input.Delta)
 		end
 	end)
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -310,10 +490,10 @@ function SkillController.start()
 	CharacterRef.onSpawn(function()
 		table.clear(samples)
 		body = nil
-		holdFacing = false
 	end)
 	-- "Input + 3" priority: after MovementController and ShotController each frame.
 	RunService:BindToRenderStep("RoHoopsSkills", Enum.RenderPriority.Input.Value + 3, function()
+		lockMouse()
 		-- The cursor has been still long enough: the stroke is over.
 		local last = samples[#samples]
 		if last and os.clock() - last.t >= Skills.STROKE_END_GAP then
