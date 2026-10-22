@@ -11,6 +11,8 @@
 -- The body always faces the rim (faceRim): the Humanoid's own turning toward the movement
 -- direction (AutoRotate) is switched off, so A / D shuffle sideways and S backpedals.
 -- SkillController's spin overrides the facing while it turns (it runs later each frame).
+-- A shot can ask for a small extra turn (setFacingYaw): a jump shooter stands with the
+-- shooting side forward instead of square to the rim.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -37,6 +39,12 @@ local targetVelocity = Vector3.zero
 local override: Vector3? = nil
 -- How fast the velocity eases toward `override`, studs/s² (nil = Motion.DRIFT_BLEND_RATE).
 local overrideRate: number? = nil
+-- Extra turn added to "facing the rim", degrees to the player's left (0 = square to the rim).
+-- Set by ShotController for a jump shooter's turned stance; 0 the rest of the time.
+local facingYaw = 0
+-- true = don't turn the body toward the rim at all (set by ShotController while a dunker is
+-- in the air: passing under the rim would otherwise swing the body round mid-air).
+local facingLocked = false
 
 -- Returns the screen's "up" and "right" directions flattened onto the floor, so key
 -- presses map to on-screen directions no matter where the camera is.
@@ -59,13 +67,16 @@ local function faceRim(parts: CharacterRef.Parts, dt: number)
 	if humanoid.AutoRotate then
 		humanoid.AutoRotate = false
 	end
+	if facingLocked then
+		return -- a dunker in the air keeps facing the way they jumped
+	end
 	local root = parts.root
 	local position = root.Position
 	local toRim = Vector3.new(Court.RIM_POSITION.X - position.X, 0, Court.RIM_POSITION.Z - position.Z)
 	if toRim.Magnitude < 0.5 then
 		return -- standing right under the rim: no clear direction, keep the current facing
 	end
-	local facingRim = CFrame.lookAt(position, position + toRim)
+	local facingRim = CFrame.lookAt(position, position + toRim) * CFrame.Angles(0, math.rad(facingYaw), 0)
 	local alpha = MovementMath.smoothingAlpha(Movement.FACE_RIM_SHARPNESS, dt)
 	root.CFrame = root.CFrame:Lerp(facingRim, alpha)
 end
@@ -151,12 +162,25 @@ function MovementController.setOverride(forcedVelocity: Vector3?, rate: number?)
 	overrideRate = rate
 end
 
+-- Makes the body face `degrees` to the left of the rim instead of straight at it (negative =
+-- to the right). Pass 0 to face the rim squarely again.
+function MovementController.setFacingYaw(degrees: number)
+	facingYaw = degrees
+end
+
+-- true = stop turning the body toward the rim (it keeps its current facing); false = turn
+-- toward the rim again as normal.
+function MovementController.setFacingLocked(locked: boolean)
+	facingLocked = locked
+end
+
 function MovementController.start()
 	CharacterRef.onSpawn(function()
 		velocity = Vector3.zero
 		targetVelocity = Vector3.zero
 		override = nil
 		overrideRate = nil
+		facingYaw = 0
 	end)
 	-- "Input + 1" priority runs right after Roblox reads input, before the camera moves.
 	RunService:BindToRenderStep("RoHoopsMovement", Enum.RenderPriority.Input.Value + 1, step)

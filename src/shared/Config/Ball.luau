@@ -24,6 +24,9 @@ local Ball = {
 
 	COLLISION_GROUP = "Ball", -- group the ball belongs to
 	PLAYER_COLLISION_GROUP = "Players", -- group every character part belongs to
+	-- Group the rim's ring is in: the ball bounces off it, players pass by it (so a dunk's
+	-- body brushing the front of the rim doesn't snag on it). The backboard stays solid.
+	RIM_COLLISION_GROUP = "Rim",
 
 	-- BOUNCE PHYSICS (only used once a shot is handed to Roblox physics near the rim) ---
 
@@ -33,29 +36,77 @@ local Ball = {
 	BACKSPIN = 12, -- spin added on release, in radians per second (visual and bounce feel)
 
 	-- DRIBBLE (the fake dribble animation while you have the ball) ----------------------
+	-- One bounce (cycle): the hand meets the ball while it is still RISING, rides it up a few
+	-- centimetres, then pushes it down and lets go (the "contact" part of the cycle); the
+	-- ball then falls, bounces and rises into the hand again (the "flight" part).
+	-- Research: docs/MOVEMENT_REFERENCES.md sections 1-4 (Hirata 2011, Liu & Hodgins 2018).
+	-- Heights are the ball's CENTRE above the floor, studs.
 
-	DRIBBLE_HEIGHT = 2.1, -- how high the ball bounces above the floor, studs
-	DRIBBLE_RATE = 1.7, -- bounces per second while standing still
-	DRIBBLE_RATE_PER_SPEED = 0.05, -- extra bounces per second for each stud/s you're moving
-	DRIBBLE_SIDE = 1.3, -- how far to the player's right the ball bounces, studs
-	DRIBBLE_FORWARD = 0.9, -- how far in front of the player the ball bounces, studs
-	-- (DRIBBLE_SIDE is mirrored to the left when the ball is in the left hand.)
+	DRIBBLE_HEIGHT = 2.1, -- reference bounce height (studs) used to scale how much a crouch lowers the ball in a dribble MOVE
+	DRIBBLE_CATCH_HEIGHT = 1.6, -- where the hand meets the ball, standing still (≈ 0.42 of body height)
+	DRIBBLE_RELEASE_HEIGHT = 1.3, -- where the hand lets go of it (≈ 0.34 of body height)
+	DRIBBLE_RUN_CATCH_HEIGHT = 2.1, -- the catch height at full speed (the ball is kept higher when running)
+	DRIBBLE_HEIGHT_SPEED = 18, -- speed (studs/s) at which the catch height reaches DRIBBLE_RUN_CATCH_HEIGHT
+	DRIBBLE_RIDE_UP = 0.15, -- how far the hand rides the ball up after meeting it, studs
+	DRIBBLE_RIDE_SHARE = 0.3, -- share of the contact time spent riding up (the rest is the push down), 0-1
+	DRIBBLE_CONTACT_SHARE = 0.55, -- share of the cycle the hand is on the ball (0.39 s of 0.6 s in the research), 0-1
+	DRIBBLE_RESTITUTION = 0.85, -- speed the ball keeps in the floor bounce (FIBA spec), 0-1
+	DRIBBLE_JITTER = 0.08, -- each bounce is randomly this share faster/slower and higher/lower (a perfect loop looks robotic), 0-1
+
+	DRIBBLE_RATE = 1.6, -- bounces per second while standing still
+	-- With no footfall information, moving speeds the dribble up: extra bounces per second
+	-- for each stud/s you're moving, up to DRIBBLE_MAX_RATE.
+	DRIBBLE_RATE_PER_SPEED = 0.05,
+	DRIBBLE_MAX_RATE = 1.8, -- bounces per second, the most the speed-based fallback rate gives
+	-- While moving, the dribble locks to the footsteps (LegController tells BallController
+	-- about every foot plant): one bounce per two steps (one stride / one shuffle cycle),
+	-- with the ball reaching the floor on a plant. These limit that rate:
+	DRIBBLE_LOCKED_MIN_RATE = 1.0, -- bounces per second, slowest locked dribble
+	DRIBBLE_LOCKED_MAX_RATE = 2.4, -- bounces per second, fastest locked dribble
+	DRIBBLE_LOCK_STRENGTH = 0.5, -- share of the timing error corrected at each foot plant (1 = snap), 0-1
+	DRIBBLE_FOOTFALL_STALE = 0.45, -- seconds without a foot plant after which the dribble falls back to the speed-based rate
+	DRIBBLE_RUN_SPEED = 9, -- studs/s above which the dribble is a running dribble (push ahead, twist, one bounce per stride)
+
+	-- Where the ball bounces, relative to the player (mirrored to the left in the left hand):
+	DRIBBLE_SIDE = 1.2, -- studs to the player's right: about 0.45 outside the ball-side foot (the stance is 1.5 wide)
+	DRIBBLE_FORWARD = 0.6, -- studs in front of the hips: beside the toes, not in front of them
+	DRIBBLE_BACK_FORWARD = -0.1, -- studs in front of the hips when backpedalling (the ball stays beside / behind the rear foot)
+	-- The ball is pushed ahead in the direction of travel: this many studs per stud/s of
+	-- speed (≈ 0.55 at shuffle speed, ≈ 1.2 at run speed), at most DRIBBLE_MAX_LEAD.
+	DRIBBLE_LEAD_PER_SPEED = 0.055,
+	DRIBBLE_MAX_LEAD = 1.3,
+	-- Seconds for the ball to settle into its dribble position after a move, a shot or a
+	-- hand change (so it never pops): the offset fades with this speed (higher = quicker).
+	DRIBBLE_SETTLE_RATE = 14,
+
+	-- DRIBBLE MOVES --------------------------------------------------------------------
+	-- A move asked for while the ball is in flight (falling or rising, hand not on it) waits
+	-- for the hand to meet it, at most this many seconds, instead of dragging the ball
+	-- along the floor.
+	MOVE_MAX_WAIT = 0.15,
+	-- The fastest the ball may be moving (studs/s) when a move takes over: the first leg of
+	-- the move keeps the ball's current speed so it doesn't restart from rest.
+	MOVE_MAX_CARRY_SPEED = 12,
 
 	-- HAND SWITCH (the H key) ----------------------------------------------------------
 	-- A quick, simple change of hands: the ball is pushed down and across in front of the
-	-- body, hits the floor on the centre line, and rises into the other hand at the top of
-	-- its bounce. (The wide Iverson crossover is in Config/Skills.luau.)
+	-- body, hits the floor on the centre line, and rises into the other hand, which waits
+	-- low and meets it on the way up. (The wide Iverson crossover is in Config/Skills.luau.)
 
-	-- Seconds from the key press until the ball is at the top of the bounce in the other
-	-- hand (when the ball starts from the top of a bounce). Lower = snappier.
-	SWITCH_TIME = 0.26,
+	-- Seconds from the key press until the other hand has the ball (when the ball starts
+	-- from the top of a bounce). Research: ~0.3-0.35 s. Lower = snappier.
+	SWITCH_TIME = 0.32,
 	-- Fraction of SWITCH_TIME spent driving the ball down to the floor; the rest is the
 	-- rise into the other hand. If the ball is already low when you press H, the push down
 	-- is shorter, so the switch always starts instantly.
 	SWITCH_DOWN_SHARE = 0.45,
 	-- Where the ball hits the floor as it crosses: this many studs in front of the hips, on
-	-- the centre line. Far enough forward that it doesn't pass through the feet.
-	SWITCH_FORWARD = 1.2,
+	-- the centre line (0.05-0.15 body heights in front of the toes), below the knee.
+	SWITCH_FORWARD = 0.6,
+	-- Where the sending hand holds the ball while it whips it across: 0 = on top, 1 = on its
+	-- upper outer side (Skills.WIDE_GRIP), from the start to the end of the push down.
+	SWITCH_GRIP_FROM = 0.3,
+	SWITCH_GRIP_TO = 0.8,
 
 	-- SHOT RESOLUTION -------------------------------------------------------------------
 

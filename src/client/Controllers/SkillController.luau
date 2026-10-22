@@ -33,11 +33,14 @@
 --               the new side and take one step that way.
 --   Stab      – lean into the ball's side and step that way as the ball is pounded out.
 --   StepBack  – plant, lean back, one step straight back.
---   Spin      – plant (while the ball is pounded), bend low, turn a full circle while
---               sliding a short way sideways.
+--   Spin      – plant (while the ball is pounded), bend low, then turn a full circle AROUND
+--               the planted pivot foot (the hips orbit it and drift Footwork.SPIN_TRAVEL
+--               toward its side); the head leads the turn.
 -- The feet are placed by LegController, following each move's real-life footwork
--- (Config/Footwork.luau, MOVE FOOTWORK): e.g. the crossover's jab and push-off, the
--- step-back's "1-2" landing, the spin's pivot foot and swing leg.
+-- (Config/Footwork.luau, MOVE FOOTWORK): e.g. the crossover's jab, head fake and push-off,
+-- the step-back's flat hop and "1-2" landing, the spin's pivot foot (twisting on the ball
+-- of the foot) and low swing leg. Move beat times come from Config/Skills.luau (the shared
+-- clock with BallController); foot and head values from Config/Footwork.luau.
 -- Every move takes at most one step, then movement goes back to the keys. The body keeps
 -- facing the rim throughout (MovementController.faceRim), apart from the spin's turn,
 -- which sets the facing itself every frame and ends facing the same way it started.
@@ -48,6 +51,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Footwork = require(ReplicatedStorage.Shared.Config.Footwork)
 local Skills = require(ReplicatedStorage.Shared.Config.Skills)
+local GaitMath = require(ReplicatedStorage.Shared.GaitMath)
 local SkillMath = require(ReplicatedStorage.Shared.SkillMath)
 local CharacterRef = require(script.Parent.Parent.CharacterRef)
 local BallController = require(script.Parent.BallController)
@@ -61,9 +65,12 @@ type Beat = {
 	run: (parts: CharacterRef.Parts) -> (),
 }
 
--- A spin's turn: the body's facing is set every frame from this.
+-- A spin's turn: the body's facing AND position are set every frame from this. The body
+-- turns around its planted pivot foot (see GaitMath.spinHips).
 type Turn = {
 	from: CFrame, -- facing (rotation only) when the turn started
+	startPosition: Vector3, -- where the hips were when the move started (flat)
+	pivot: Vector3?, -- the ball of the pivot foot (flat world), set when the turn starts
 	startsAt: number, -- seconds after the move starts
 	duration: number, -- seconds for the whole turn
 	radians: number, -- how far to turn (positive = counterclockwise from above)
@@ -94,6 +101,10 @@ local cursorX, cursorY = 0, 0
 local function bodyVelocity(rootCFrame: CFrame, side: number, forward: number): Vector3
 	local right, look = rootCFrame.RightVector, rootCFrame.LookVector
 	return Vector3.new(right.X, 0, right.Z).Unit * side + Vector3.new(look.X, 0, look.Z).Unit * forward
+end
+
+local function flat(v: Vector3): Vector3
+	return Vector3.new(v.X, 0, v.Z)
 end
 
 -- Footwork shared by every move (Config/Skills.luau, FOOTWORK).
@@ -141,6 +152,25 @@ local function stepFoot(
 	LegController.stepFoot(sideName(sign), offset, duration, lift, frame, bulge)
 end
 
+-- Where the hips are `t` seconds after a spin starts (flat world position): the body turns
+-- around the ball of the pivot foot while the weight moves over it and carries on past it
+-- (Footwork.SPIN_TRAVEL in all). GaitMath.spinHips does the geometry.
+local function spinHipsAt(turn: Turn, pivot: Vector3, t: number): Vector3
+	local progress = math.clamp((t - turn.startsAt) / math.max(turn.duration, 0.05), 0, 1)
+	local angle = turn.radians * GaitMath.turnProgress(progress)
+	local shift = GaitMath.spinShift(progress, Footwork.SPIN_SHIFT_SHARPNESS)
+	local x, z = GaitMath.spinHips(
+		pivot.X,
+		pivot.Z,
+		turn.startPosition.X,
+		turn.startPosition.Z,
+		Footwork.SPIN_TRAVEL,
+		shift,
+		angle
+	)
+	return Vector3.new(x, 0, z)
+end
+
 -- The body's beats for a move. `fromSign` = +1 if the ball is in the right hand, -1 if
 -- left; `spinSign` = +1 for a counterclockwise spin, -1 for clockwise (spins only).
 local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number): ({ Beat }, number, Turn?)
@@ -151,7 +181,7 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 		local trailLeaves = sell + Footwork.CROSS_TRAIL_DELAY
 		return {
 			{ -- SELL: plant, crouch low and lean over the ball and toward it; the ball-side
-				-- foot jabs out wide (the fake).
+				-- foot jabs out diagonally (the fake) and the head turns to look that way.
 				at = 0,
 				run = function()
 					plant()
@@ -168,6 +198,13 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 						Footwork.CROSS_JAB_TIME,
 						Footwork.MIN_LIFT * 2
 					)
+					PostureController.setHeadTurn(fromSign * Footwork.CROSS_HEAD_FAKE, Footwork.CROSS_HEAD_FAKE_TIME)
+				end,
+			},
+			{ -- The head snaps the other way just before the ball is pounded across.
+				at = math.max(sell - Footwork.CROSS_HEAD_SNAP_TIME, Footwork.CROSS_HEAD_FAKE_TIME),
+				run = function()
+					PostureController.setHeadTurn(-fromSign * Footwork.CROSS_HEAD_SNAP, Footwork.CROSS_HEAD_SNAP_TIME)
 				end,
 			},
 			{ -- EXPLODE: as the ball is pounded across, whip the lean over and push off the
@@ -190,6 +227,12 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 					stepFoot(fromSign, 0, stagger, Footwork.CROSS_TRAIL_TIME, Footwork.MAX_LIFT * 0.6)
 				end,
 			},
+			{ -- The head comes back to the front once the ball has crossed.
+				at = sell + Skills.WIDE_PUSH_TIME,
+				run = function()
+					PostureController.setHeadTurn(0, Skills.WIDE_RISE_TIME + Skills.WIDE_RECOVER_TIME * 0.5)
+				end,
+			},
 			{ at = sell + Skills.STEP_TIME, run = releaseFeet },
 			{ at = trailLeaves + Footwork.CROSS_TRAIL_TIME, run = unscriptFeet },
 		},
@@ -198,7 +241,8 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 		local stabTime = Skills.STAB_PUSH_TIME + Skills.STAB_RISE_TIME
 		return {
 			{ -- Lean into the ball's side and step that way, straight away: the ball-side
-				-- foot stabs out to that side...
+				-- foot stabs out-forward to that side, landing as the ball bounces (it takes
+				-- as long as the ball's push down)...
 				at = 0,
 				run = function(parts)
 					PostureController.leanTo(
@@ -212,12 +256,12 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 						fromSign,
 						Footwork.STAB_OUT,
 						Footwork.STAB_FORWARD,
-						Footwork.STAB_LEAD_TIME,
+						Skills.STAB_PUSH_TIME,
 						Footwork.MAX_LIFT * 0.5
 					)
 				end,
 			},
-			{ -- ...and the other foot follows it (push, pull, recover; never crossing).
+			{ -- ...and the other foot only recovers to the stance (push, pull, recover; never crossing).
 				at = Footwork.STAB_TRAIL_DELAY,
 				run = function()
 					stepFoot(-fromSign, 0, stagger, Footwork.STAB_TRAIL_TIME, Footwork.MIN_LIFT * 2)
@@ -230,6 +274,7 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 	elseif move == "StepBack" then
 		local plantTime = Skills.STEPBACK_PLANT_TIME
 		local frontLeaves = plantTime + Footwork.STEPBACK_FRONT_FOOT_DELAY
+		local backLands = plantTime + Footwork.STEPBACK_BACK_FOOT_TIME
 		return {
 			{ -- Plant the front (off) foot hard and lean back.
 				at = 0,
@@ -241,7 +286,7 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 						-fromSign,
 						0,
 						Footwork.STEPBACK_PLANT_FORWARD,
-						math.max(plantTime, 0.04),
+						Footwork.STEPBACK_PLANT_FOOT_TIME,
 						Footwork.MIN_LIFT
 					)
 				end,
@@ -254,28 +299,38 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 					stepFoot(fromSign, 0, -stagger, Footwork.STEPBACK_BACK_FOOT_TIME, Footwork.STEPBACK_LIFT)
 				end,
 			},
-			{ -- ...then the front foot ("1-2").
+			{ -- ...then the front foot ("1-2"). Both feet are off the floor now: a low, flat hop
+				-- (the hips come up a little, but nowhere near a jump).
 				at = frontLeaves,
 				run = function()
 					stepFoot(-fromSign, 0, stagger, Footwork.STEPBACK_FRONT_FOOT_TIME, Footwork.STEPBACK_LIFT * 0.8)
+					LegController.setMoveCrouch(Footwork.STEPBACK_CROUCH - Footwork.STEPBACK_HOP_RISE)
+				end,
+			},
+			{ -- The back foot lands: the knees take the landing.
+				at = backLands,
+				run = function()
+					LegController.setMoveCrouch(Footwork.STEPBACK_CROUCH)
+					LegController.absorbLanding(Footwork.STEPBACK_LAND_STRENGTH)
 				end,
 			},
 			{ at = plantTime + Skills.STEP_TIME, run = releaseFeet },
 			{
-				at = math.max(
-					plantTime + Footwork.STEPBACK_BACK_FOOT_TIME,
-					frontLeaves + Footwork.STEPBACK_FRONT_FOOT_TIME
-				),
+				at = math.max(backLands, frontLeaves + Footwork.STEPBACK_FRONT_FOOT_TIME),
 				run = unscriptFeet,
 			},
 		},
 			math.max(Skills.STEPBACK_PULL_TIME + Skills.STEPBACK_RISE_TIME, plantTime + Skills.STEP_TIME)
 	elseif move == "Spin" then
 		local gather, spinTime = Skills.SPIN_GATHER_TIME, Skills.SPIN_TIME
-		-- A clockwise spin (spinSign -1) slides left, counterclockwise slides right.
+		-- The pivot foot is on the side the body drifts toward: a clockwise spin (spinSign -1)
+		-- pivots on the left foot, counterclockwise on the right.
 		local slideSign = spinSign
+		local pivotSide, swingSide = sideName(slideSign), sideName(-slideSign)
 		local turn: Turn = {
 			from = CFrame.identity, -- filled in when the move starts
+			startPosition = Vector3.zero, -- (same)
+			pivot = nil,
 			startsAt = gather,
 			duration = spinTime,
 			radians = spinSign * math.rad(Skills.SPIN_DEGREES),
@@ -284,38 +339,70 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 		local pivotLeaves = gather + Footwork.SPIN_PIVOT_LIFTS_AT * spinTime
 		local pivotTime = math.max(Footwork.SPIN_PIVOT_LANDS_AT - Footwork.SPIN_PIVOT_LIFTS_AT, 0.05) * spinTime
 		return {
-			{ -- Plant and get low while the ball comes in to the hip.
+			{ -- Plant and get low while the ball comes in to the hip. The head turns first,
+				-- looking where the body is about to go.
 				at = 0,
 				run = function()
 					plant()
 					PostureController.leanTo(-Skills.SPIN_LEAN, gather, 0)
 					scriptFeet(Footwork.SPIN_CROUCH)
+					PostureController.setHeadTurn(-spinSign * Footwork.SPIN_HEAD_LEAD, gather)
 				end,
 			},
-			{ -- Turn (see `turn`) while sliding sideways, in the direction faced at the start.
-				-- Pivot on the foot on the side you're sliding toward; the other leg swings
-				-- round behind you and lands just past the hips, across the pivot foot.
-				-- (Feet are placed relative to the starting facing: the body turns underneath.)
+			{ -- Turn (see `turn`) around the pivot foot, which stays planted and twists on the
+				-- ball of the foot. The other leg swings round low and behind, and lands before
+				-- the pivot foot comes off the floor.
 				at = gather,
-				run = function()
-					local slide = bodyVelocity(turn.from, slideSign, 0) * (Skills.SPIN_SLIDE / math.max(spinTime, 0.05))
-					MovementController.setOverride(slide, Skills.STEP_RATE)
-					local behind = -bodyVelocity(turn.from, 0, 1) * Footwork.SPIN_SWING_BULGE
-					stepFoot(
-						-slideSign,
-						-(halfStance() + Footwork.SPIN_SWING_PAST), -- lands SPIN_SWING_PAST over the middle
-						0,
+				run = function(parts: CharacterRef.Parts)
+					-- Re-read where the body is now: plant() brakes over the gather, so from a run
+					-- the hips can slide ~1 stud after the move started. Using the start-of-move
+					-- spot would snap the body back when the turn begins.
+					turn.from = parts.root.CFrame.Rotation
+					turn.startPosition = flat(parts.root.Position)
+					local right0, look0 = flat(turn.from.RightVector), flat(turn.from.LookVector)
+					local ball = LegController.pivotFoot(pivotSide, true)
+						or (turn.startPosition + right0 * (slideSign * halfStance()))
+					turn.pivot = ball
+					-- Tell the legs where the hips are going, so steps land where the body will be.
+					local startedAt = os.clock()
+					LegController.setHipsPath(function(seconds: number)
+						return spinHipsAt(turn, ball, gather + os.clock() - startedAt + seconds)
+					end)
+					local hipsEnd = spinHipsAt(turn, ball, gather + spinTime)
+					local swingSpot = hipsEnd
+						- right0 * (slideSign * halfStance())
+						+ look0 * Footwork.SPIN_SWING_FORWARD
+					LegController.stepFootTo(
+						swingSide,
+						swingSpot,
 						swingLands,
 						Footwork.SPIN_LIFT,
-						turn.from,
-						behind
+						Vector3.new(0, 0, -Footwork.SPIN_SWING_BULGE), -- behind the body, turning with it
+						true
 					)
+				end,
+			},
+			{ -- The head has finished its lead: it comes back to the front as the body catches up.
+				at = gather + 0.35 * spinTime,
+				run = function()
+					PostureController.setHeadTurn(0, 0.35 * spinTime)
 				end,
 			},
 			{ -- The pivot foot comes off the floor and steps through to finish the stance.
 				at = pivotLeaves,
 				run = function()
-					stepFoot(slideSign, 0, 0, pivotTime, Footwork.SPIN_LIFT * 0.7, turn.from)
+					LegController.pivotFoot(pivotSide, false)
+					local pivot = turn.pivot
+					if pivot then
+						local hipsEnd = spinHipsAt(turn, pivot, gather + spinTime)
+						local right0 = flat(turn.from.RightVector)
+						LegController.stepFootTo(
+							pivotSide,
+							hipsEnd + right0 * (slideSign * halfStance()),
+							pivotTime,
+							Footwork.SPIN_LIFT * 0.7
+						)
+					end
 				end,
 			},
 			{ at = gather + spinTime, run = releaseFeet },
@@ -343,6 +430,7 @@ local function startMove(move: SkillMath.Move, spinSign: number?)
 	end
 	if turn then
 		turn.from = parts.root.CFrame.Rotation
+		turn.startPosition = flat(parts.root.Position)
 	end
 	-- Beats run in time order (tuning can reorder them), and the move lasts until its last one.
 	table.sort(beats, function(a, b)
@@ -367,6 +455,7 @@ local function step()
 	if BallController.getMode() ~= "Dribble" then
 		body = nil
 		PostureController.leanTo(0, Skills.WIDE_LEAN_RECOVER_TIME)
+		PostureController.setHeadTurn(0, 0.15) -- a spin/crossover head lead mustn't stay on
 		unscriptFeet()
 		return
 	end
@@ -377,13 +466,23 @@ local function step()
 		current.nextBeat += 1
 	end
 
-	-- The spin's turn: set the facing directly (smooth start and stop).
+	-- The spin's turn: set the facing directly (fast start, easing into the end), and the
+	-- position too, because the body turns around its pivot foot rather than on the spot.
+	-- (Only while turning: once the turn is done, movement is already handed back
+	-- (releaseFeet), so writing the root here would freeze the player until the ball's
+	-- exit bounce is caught.)
 	local turn = current.turn
-	if turn and elapsed >= turn.startsAt then
+	if turn and elapsed >= turn.startsAt and elapsed <= turn.startsAt + turn.duration then
 		local progress = math.clamp((elapsed - turn.startsAt) / math.max(turn.duration, 0.05), 0, 1)
-		local eased = progress * progress * (3 - 2 * progress)
+		local angle = turn.radians * GaitMath.turnProgress(progress)
 		local root = parts.root
-		root.CFrame = CFrame.new(root.Position) * turn.from * CFrame.Angles(0, turn.radians * eased, 0)
+		local position = root.Position
+		local pivot = turn.pivot
+		if pivot then
+			local hips = spinHipsAt(turn, pivot, elapsed)
+			position = Vector3.new(hips.X, position.Y, hips.Z)
+		end
+		root.CFrame = CFrame.new(position) * turn.from * CFrame.Angles(0, angle, 0)
 	end
 
 	if elapsed >= current.total then

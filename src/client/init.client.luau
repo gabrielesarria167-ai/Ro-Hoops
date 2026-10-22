@@ -10,11 +10,12 @@
 --   Controllers/BallController      dribble, gather path, shot flight, make/miss detection
 --   Controllers/ArmController       hands on the ball (arm IK) and the follow-through
 --   Controllers/LegController       footwork (stance, shuffle, move steps), the shot's dip and air legs
---   Controllers/PostureController   upright torso and eyes on the rim during a shot
+--   Controllers/PostureController   spine/neck pose (hip hinge, level eyes), upright torso and eyes on the rim during a shot
 --   Controllers/ShotController      the E key: shot type, timing, aim
 --   Controllers/SkillController     mouse/trackpad flicks → dribble moves (crossover)
 --   Controllers/HudController       timing meter, callouts, stats panel
--- All the numbers they use live in src/shared/Config/.
+-- All the numbers they use live in src/shared/Config/ (Movement, Camera, Shooting, Ball, Motion,
+-- Skills, Footwork, Posture).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -41,6 +42,7 @@ Tunable.bind("Ball", require(Config.Ball))
 Tunable.bind("Motion", require(Config.Motion))
 Tunable.bind("Skills", require(Config.Skills))
 Tunable.bind("Footwork", require(Config.Footwork))
+Tunable.bind("Posture", require(Config.Posture))
 
 -- Start order matters: character tracking first, then input before the systems that read it.
 CharacterRef.start()

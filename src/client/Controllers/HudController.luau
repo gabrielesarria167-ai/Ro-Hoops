@@ -5,7 +5,7 @@
 --   * top-right: a stats panel (speed, distance to the rim, field goals) for tuning
 --   * centre: the crosshair, where the mouse is locked (SkillController.lockMouse)
 -- ShotController tells it what to show through beginShot / setProgress / releaseShot /
--- shotResolved.
+-- shotResolved, and notice for short messages (e.g. "TOO FAR TO DUNK").
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -62,6 +62,7 @@ local CROSSHAIR_TRANSPARENCY = 0.25 -- 0 = solid, 1 = invisible
 -- SCREEN ELEMENTS (created in build()) --------------------------------------------------
 
 local shotGroup: CanvasGroup -- holds the meter and callouts so they fade together
+local meterTrack: Frame -- the meter's dark track (hidden for dunks, which have no meter)
 local meterFill: Frame -- the bar that grows while E is held
 local perfectZone: Frame -- the green zone
 local targetTick: Frame -- the white line at the perfect moment
@@ -141,6 +142,7 @@ local function build()
 	meter.ClipsDescendants = true
 	meter.Parent = shotGroup
 	corner(meter, 6)
+	meterTrack = meter
 
 	-- Green zone. Its position and width are set in beginShot from the Shooting config.
 	perfectZone = Instance.new("Frame")
@@ -251,10 +253,12 @@ local function updateStats()
 	)
 end
 
--- E pressed: show an empty meter with the green zone, and the shot type.
-function HudController.beginShot(label: string)
+-- E pressed: show an empty meter with the green zone, and the shot type. `showMeter`
+-- false = just the shot type (a dunk has no timing).
+function HudController.beginShot(label: string, showMeter: boolean?)
 	cancelFade()
 	shotGroup.GroupTransparency = 0
+	meterTrack.Visible = showMeter ~= false
 
 	-- Recalculated every shot so live-tuned timing values show up immediately.
 	local ideal = Shooting.IDEAL_RELEASE
@@ -282,16 +286,28 @@ function HudController.releaseShot(grade: ShotMath.Grade, progress: number)
 	resultLabel.TextColor3 = GRADE_COLORS[grade]
 end
 
--- Shot decided: update FG, show "GRADE · BUCKET/MISS", then fade out.
-function HudController.shotResolved(made: boolean, grade: ShotMath.Grade)
+-- Shot decided: update FG, show "GRADE · BUCKET/MISS", then fade out. `callout`
+-- replaces the grade's text (a dunk shows "SLAM").
+function HudController.shotResolved(made: boolean, grade: ShotMath.Grade, callout: string?)
 	attempts += 1
 	if made then
 		makes += 1
 	end
 	cancelFade()
 	shotGroup.GroupTransparency = 0
-	resultLabel.Text = string.format("%s · %s", GRADE_TEXT[grade], if made then "BUCKET" else "MISS")
+	resultLabel.Text = string.format("%s · %s", callout or GRADE_TEXT[grade], if made then "BUCKET" else "MISS")
 	resultLabel.TextColor3 = if made then MADE_COLOR else MISSED_COLOR
+	fadeOutLater()
+end
+
+-- Shows a short message where the shot result goes (no meter), then fades it out.
+function HudController.notice(text: string)
+	cancelFade()
+	shotGroup.GroupTransparency = 0
+	meterTrack.Visible = false
+	shotLabel.Text = ""
+	resultLabel.Text = text
+	resultLabel.TextColor3 = TEXT_COLOR
 	fadeOutLater()
 end
 

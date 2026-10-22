@@ -1,16 +1,28 @@
 --!strict
 -- SHOT MATH
 -- Plain math with no Roblox APIs, so it can be unit tested outside Studio with Lune
--- (tests/ShotMath.spec.luau). Covers the four decisions behind every shot:
+-- (tests/ShotMath.spec.luau). Covers the decisions behind every shot:
 --   1. classify       – which shot type an E press becomes
 --   2. grade          – how well the release was timed
 --   3. aimError       – how far off target a mistimed release lands
 --   4. launchVelocity – the exact throw that makes the ball land on that target
+-- and behind finishing at the rim (layups and dunks):
+--   5. canDunk        – whether a double-click can dunk from here, and which kind
+--   6. finishTiming   – how long the drive to the rim takes and how fast it goes
+--   7. jumpPowerFor   – the jump that rises exactly high enough
+--   8. slamVelocity   – the throw that slams the ball down through the rim
+-- and behind the jump's timing:
+--   9. dipTime        – how long to gather on the ground so the release lands where it should
+--                       relative to the top of the jump
 
 local ShotMath = {}
 
 -- Every shot type. Each one must have a matching entry in Config/Shooting.luau `Types`.
-export type ShotType = "JumpShot" | "PullUp" | "Fadeaway" | "StepBack" | "SideShot" | "Layup" | "CloseShot"
+export type ShotType = "JumpShot" | "PullUp" | "Fadeaway" | "StepBack" | "SideShot" | "Layup" | "CloseShot" | "Dunk"
+
+-- How a dunk is taken: on the run (one-foot takeoff off the left foot, from up to
+-- DUNK_RANGE_FT) or from a standstill right under the rim (deep two-foot takeoff).
+export type DunkKind = "Running" | "Standing"
 
 -- Every release grade, from best to worst on each side of the perfect moment.
 export type Grade = "Perfect" | "Good" | "Early" | "Late" | "VeryEarly" | "VeryLate"
@@ -26,7 +38,15 @@ export type ShotContext = {
 -- The settings each function needs (they come from Config/Shooting.luau).
 export type ClassifyConfig = {
 	CLOSE_RANGE_FT: number,
+	LAYUP_RANGE_FT: number,
+	DRIVE_LAYUP_RANGE_FT: number,
 	STATIONARY_SPEED: number,
+}
+
+export type DunkConfig = {
+	DUNK_RANGE_FT: number,
+	STANDING_DUNK_RANGE_FT: number,
+	DUNK_MIN_SPEED: number,
 }
 
 export type GradeConfig = {
@@ -60,6 +80,12 @@ function ShotMath.classify(context: ShotContext, config: ClassifyConfig): ShotTy
 			return "Layup"
 		end
 		return "CloseShot"
+	end
+	-- A little further out, heading mostly at the rim is still a layup: you drive in for
+	-- the gather steps first. Running (Shift) reaches further, like a real drive.
+	local layupRange = if context.running then config.DRIVE_LAYUP_RANGE_FT else config.LAYUP_RANGE_FT
+	if context.distanceFeet <= layupRange and toward > config.STATIONARY_SPEED and toward >= lateral then
+		return "Layup"
 	end
 
 	-- Further out: barely moving is a standing jump shot...
@@ -143,6 +169,75 @@ function ShotMath.launchVelocity(
 	local flightTime = vy / gravity + math.sqrt(2 * (apex - y1) / gravity)
 	-- Horizontal speed is constant, so it just covers the distance in that time.
 	return (x1 - x0) / flightTime, vy, (z1 - z0) / flightTime, flightTime
+end
+
+-- 5. Whether a double-click dunks from here (nil = it can't). Right under the rim
+-- (STANDING_DUNK_RANGE_FT) you can dunk from a standstill; further out, up to
+-- DUNK_RANGE_FT, you need to be attacking the rim: moving at it at DUNK_MIN_SPEED or more,
+-- more toward it than across. (Whether the jump can reach the rim is checked separately,
+-- with jumpPowerFor.)
+function ShotMath.canDunk(context: ShotContext, config: DunkConfig): DunkKind?
+	local toward = context.towardSpeed
+	local attacking = toward >= config.DUNK_MIN_SPEED and toward >= math.abs(context.lateralSpeed)
+	if context.distanceFeet <= config.STANDING_DUNK_RANGE_FT then
+		return if attacking then "Running" else "Standing"
+	end
+	if context.distanceFeet <= config.DUNK_RANGE_FT and attacking then
+		return "Running"
+	end
+	return nil
+end
+
+-- 6. A finish (layup or dunk) carries you `room` studs toward the rim. It takes at least
+-- `minTime` seconds (the gather and jump themselves), and you never go faster than
+-- `driveSpeed` (how fast you were attacking), so from further out it takes longer: those
+-- extra seconds are the drive in before the gather. Returns (seconds, speed in studs/s).
+function ShotMath.finishTiming(room: number, driveSpeed: number, minTime: number): (number, number)
+	room = math.max(room, 0)
+	local seconds = math.max(minTime, room / math.max(driveSpeed, 0.01), 0.01)
+	return seconds, room / seconds
+end
+
+-- 7. The jump power (upward speed at takeoff, studs/s) that rises exactly `rise` studs
+-- under `gravity`: rise = power² / (2 × gravity). The top comes power / gravity seconds
+-- after takeoff.
+function ShotMath.jumpPowerFor(rise: number, gravity: number): number
+	return math.sqrt(2 * gravity * math.max(rise, 0))
+end
+
+-- 8. The throw that takes the ball from (x0, y0, z0) to (x1, y1, z1) in exactly `seconds`
+-- under `gravity`: the straight-line speed plus enough extra upward speed to cancel what
+-- gravity adds on the way. Returns (vx, vy, vz).
+function ShotMath.slamVelocity(
+	x0: number,
+	y0: number,
+	z0: number,
+	x1: number,
+	y1: number,
+	z1: number,
+	seconds: number,
+	gravity: number
+): (number, number, number)
+	local t = math.max(seconds, 0.01)
+	return (x1 - x0) / t, (y1 - y0) / t + 0.5 * gravity * t, (z1 - z0) / t
+end
+
+-- 9. How long the dip (the gather on the ground before takeoff) lasts. The perfect release
+-- is `idealRelease` seconds after E. The jump's top comes jumpPower / gravity seconds after
+-- takeoff, and the release should come `apexOffset` seconds after that top (negative =
+-- before it), so the dip is what is left of `idealRelease`. It is kept between `minDip` and
+-- `maxDip`: if the clamp bites, the release lands off its intended spot relative to the top
+-- (the meter timing never changes, only where in the jump the ball is let go).
+function ShotMath.dipTime(
+	idealRelease: number,
+	jumpPower: number,
+	gravity: number,
+	apexOffset: number,
+	minDip: number,
+	maxDip: number
+): number
+	local releaseAfterTakeoff = jumpPower / gravity + apexOffset
+	return math.clamp(idealRelease - releaseAfterTakeoff, minDip, maxDip)
 end
 
 return ShotMath

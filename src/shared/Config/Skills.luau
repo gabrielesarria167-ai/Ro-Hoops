@@ -74,27 +74,35 @@ local Skills = {
 	-- Ball spots are Vector3.new(out, height, forward): `out` = studs out to the side the
 	-- ball is on at that moment (mirrored automatically for either hand), `height` = studs
 	-- from the floor to the ball's centre, `forward` = studs in front of the hips.
-	WIDE_SELL_SPOT = Vector3.new(1.9, 1.8, 0.9), -- held out wide on the starting side
+	-- Research (docs/MOVEMENT_REFERENCES.md section 6): the sell ball is ~0.3 body heights
+	-- out from the centre line and below the knee.
+	WIDE_SELL_SPOT = Vector3.new(1.7, 1.0, 0.7), -- held out wide and low on the starting side
 	WIDE_BOUNCE_FORWARD = 1.4, -- where it bounces: on the centre line, this far in front
-	WIDE_CATCH_SPOT = Vector3.new(1.8, 1.5, 1.0), -- caught wide and low on the other side
+	WIDE_CATCH_SPOT = Vector3.new(1.6, 1.0, 0.8), -- caught low on the rise, outside the new foot
 
 	-- Seconds for each part of the ball's trip. Lower = snappier.
-	WIDE_SELL_TIME = 0.16, -- out to the sell spot
+	-- (WIDE_SELL_TIME is also the body's hesitation before the cross: SkillController reads
+	-- it, so the feet, head and ball stay in step. Research: hesitation 0.15-0.3 s.)
+	WIDE_SELL_TIME = 0.22, -- out to the sell spot
 	WIDE_PUSH_TIME = 0.1, -- pounded down to the bounce
 	WIDE_RISE_TIME = 0.12, -- up from the bounce into the other hand
 	WIDE_RECOVER_TIME = 0.22, -- carried back up to a normal dribble
+	-- The old hand keeps the ball through this share of the push down (0-1) before letting
+	-- go, so it whips the ball across instead of dropping it.
+	WIDE_HOLD_SHARE = 0.7,
 
 	-- Hands: during the move the palm holds the ball's outer side instead of its top (so
 	-- it can pull the ball wide and whip it across). This is the direction from the ball's
 	-- centre to the palm: (out, up, forward), mirrored for the left hand.
-	WIDE_GRIP = Vector3.new(0.55, 0.8, -0.1),
+	-- (0.85, 0.55, ...) is ~57 degrees off the top of the ball: the upper-outside quarter.
+	WIDE_GRIP = Vector3.new(0.85, 0.55, -0.1),
 
 	-- Body lean, degrees (see PostureController). FORWARD = bent over the ball (a low,
 	-- athletic stance); SIDE = toward the ball on the sell, toward the new side on the cross.
 	-- The run animation already bends the torso forward ~20° during the burst, so the
 	-- cross needs much less forward lean than the sell to look the same.
 	WIDE_SELL_FORWARD_LEAN = 12,
-	WIDE_SELL_SIDE_LEAN = 10,
+	WIDE_SELL_SIDE_LEAN = 18, -- research: trunk side-bend 15-25 degrees toward the jab
 	WIDE_CROSS_FORWARD_LEAN = 4,
 	WIDE_CROSS_SIDE_LEAN = 18,
 	-- Seconds to straighten back up after the move.
@@ -112,17 +120,26 @@ local Skills = {
 	STEPBACK_PLANT_TIME = 0.06, -- seconds planted before the step back
 	STEPBACK_PULL_TIME = 0.14, -- seconds for the ball to be pulled back and down to its bounce
 	STEPBACK_RISE_TIME = 0.16, -- seconds for it to come back up into the hand
-	STEPBACK_BOUNCE_FORWARD = 0.3, -- where it bounces: this many studs in front of the hips
-	-- Degrees the body leans back during the step. The run animation bends the torso
-	-- ~20° forward while moving, so this has to be fairly big to read as leaning back.
-	STEPBACK_LEAN = 12,
+	-- Where it bounces: between the feet, inside the ball-side foot and a little ahead (away
+	-- from the "defender"), clear of the foot. (out, forward) in studs from the hips.
+	STEPBACK_BOUNCE_OUT = 0.55,
+	STEPBACK_BOUNCE_FORWARD = 0.5,
+	-- Degrees the body leans back during the step. Research: the trunk never really leans
+	-- back in a step-back (the stance's forward hinge stays), so this is small.
+	STEPBACK_LEAN = 6,
 
 	-- STAB DRIBBLE (flick toward the hand that has the ball) -----------------------------
 	-- The same hand pounds the ball hard out to its own side while the body leans into it
 	-- and takes its one step that way (see FOOTWORK). The ball bounces out wide, then comes
 	-- back up into the same hand as the body catches up with it.
-	STAB_BOUNCE_OUT = 2.0, -- where it bounces: this many studs out to the side of the hips...
-	STAB_BOUNCE_FORWARD = 1.0, -- ...and this many in front
+	-- Where it bounces: within reach, ~0.6 outside the ball-side foot.
+	STAB_BOUNCE_OUT = 1.3, -- this many studs out to the side of the hips...
+	STAB_BOUNCE_FORWARD = 0.8, -- ...and this many in front
+	-- The hand rolls from inside-top, over the top, to outside-top (never under the ball):
+	-- grip values like Config/Ball.luau SWITCH_GRIP_...: 0 = on top, 1 = upper outer side,
+	-- negative = upper inner side.
+	STAB_GRIP_START = -0.4,
+	STAB_GRIP_PUSH_END = 0.6,
 	STAB_PUSH_TIME = 0.12, -- seconds to pound it down and out to the bounce
 	STAB_RISE_TIME = 0.16, -- seconds for it to come back up into the hand
 	-- How much of the step goes forward: 0 = straight sideways, 1 = as much forward as sideways.
@@ -148,7 +165,9 @@ local Skills = {
 	-- hand the ball started in.
 	SPIN_POUND_OUT = 1.2, -- 1. where the pound bounces: this many studs out to the ball's side...
 	SPIN_POUND_FORWARD = 0.5, -- ...and this many in front of the hips
-	SPIN_POCKET = Vector3.new(1, 2.3, 0.2), -- 2. where the hand holds it during the turn: against its hip
+	-- 2. where the hand holds it during the turn: close to the hip but clear of the thigh
+	-- (the ball's radius is ~0.63, the thigh is ~0.5 out from the hips).
+	SPIN_POCKET = Vector3.new(1.25, 1.9, 0.45),
 	SPIN_BOUNCE_ACROSS = 0.3, -- 3. where it bounces coming out: this far over to the NEW hand's side...
 	SPIN_BOUNCE_FORWARD = 1, -- ...and this far in front of the hips
 	SPIN_GATHER_TIME = 0.1, -- seconds for the pound (planted, before the turn starts)

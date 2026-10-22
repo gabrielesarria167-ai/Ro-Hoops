@@ -9,6 +9,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Ball = require(ReplicatedStorage.Shared.Config.Ball)
 local Court = require(ReplicatedStorage.Shared.Config.Court)
 
 local HoopBuilder = {}
@@ -68,6 +69,7 @@ local function buildRim(parent: Instance)
 			RIM_COLOR
 		)
 		segment.CustomPhysicalProperties = RIM_PHYSICS
+		segment.CollisionGroup = Ball.RIM_COLLISION_GROUP -- the ball hits it, players pass by (CollisionGroups)
 	end
 
 	-- Bracket joining the rim to the backboard. Purely visual, so it doesn't collide.

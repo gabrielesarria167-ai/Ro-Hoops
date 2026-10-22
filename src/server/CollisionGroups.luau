@@ -5,6 +5,8 @@
 --   * the ball is in the "Ball" group (set in src/client/Controllers/BallController.luau)
 --   * every part of every character is put in the "Players" group (done here)
 --   * those two groups are told not to collide.
+-- The rim's ring is in the "Rim" group (HoopBuilder), which the ball hits but players
+-- don't, so a dunker's body brushing the front of the rim doesn't snag on it.
 -- The group names live in src/shared/Config/Ball.luau.
 
 local Players = game:GetService("Players")
@@ -43,6 +45,8 @@ function CollisionGroups.setup()
 	PhysicsService:RegisterCollisionGroup(Ball.COLLISION_GROUP)
 	PhysicsService:RegisterCollisionGroup(Ball.PLAYER_COLLISION_GROUP)
 	PhysicsService:CollisionGroupSetCollidable(Ball.COLLISION_GROUP, Ball.PLAYER_COLLISION_GROUP, false)
+	PhysicsService:RegisterCollisionGroup(Ball.RIM_COLLISION_GROUP)
+	PhysicsService:CollisionGroupSetCollidable(Ball.RIM_COLLISION_GROUP, Ball.PLAYER_COLLISION_GROUP, false)
 
 	Players.PlayerAdded:Connect(onPlayer)
 	-- Players who joined before this script ran (common in Studio's Play mode).
