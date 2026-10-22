@@ -2,7 +2,7 @@
 -- SHOOTING MOTION SETTINGS
 -- How the shots look. Each shot type picks a motion (Shooting.Types[...].MOTION):
 --
--- JUMP SHOT (jump shot, pull-up, fadeaway, step-back, side shot, close shot):
+-- JUMP SHOT (jump shot, pull-up, fadeaway, side shot, close shot):
 --   1. DIP     – knees bend, the ball comes into both hands at the belt (the POCKET)
 --   2. SET     – arms and legs rise TOGETHER: the ball is already at the forehead (the SET
 --                POINT) at takeoff (research: Podmenik 2021 - wrist 103-109% of body height)

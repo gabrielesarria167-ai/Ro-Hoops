@@ -32,9 +32,9 @@ t.describe("ShotMath.classify", function()
 		t.equal(classify(18, 13, 0), "PullUp")
 	end)
 
-	t.test("moving away is a fadeaway, or a step-back when running", function()
-		t.equal(classify(18, -13, 0, false), "Fadeaway")
-		t.equal(classify(18, -21, 0, true), "StepBack")
+	t.test("sprinting away is a fadeaway, walking away a jump shot", function()
+		t.equal(classify(18, -13, 0, false), "JumpShot")
+		t.equal(classify(18, -21, 0, true), "Fadeaway")
 	end)
 
 	t.test("mostly sideways movement is a side shot in either direction", function()

@@ -114,6 +114,9 @@ Check these against slow-motion video before treating them as fact.
 | Foot order | lead foot lifts and lands first, trail foot slides in 80–150 ms later; feet never cross | — | [C]+[D] |
 | Base width → reach | 0.28–0.35 H → 0.40–0.45 H | 1.4 → ~2.0 studs | [C]+[D] |
 | Lead step per cycle | ≤ 0.25 H | ≤ 0.85 stud | [C] |
+| Base opens and closes | lead foot steps out, trail foot "brought up close" as soon as it lands; never crossing or clicking | lead +0.3 stud wider, trail −0.3 stud narrower (`SHUFFLE_LEAD_OUT` / `SHUFFLE_TRAIL_IN`) | [C] (refs 25, 26) |
+| Hips | low and square; thighs ~45° to the court | +0.1 stud extra crouch while shuffling (`SHUFFLE_CROUCH`) | [C] (refs 25, 26) |
+| Ball height | no higher than the knees; hand midway between front and rear foot | catch ≈ 1.25 studs (`DRIBBLE_SHUFFLE_CATCH_HEIGHT`) | [C] (ref 25) |
 | Foot clearance | 2–5 cm | 0.05–0.1 stud | [C] |
 | Shuffle cycle (lead + trail) | 0.30–0.40 s at game speed, 0.45–0.6 s casual | — | [D] |
 | Hip height bob | ≤ 2–4% H | ≤ 0.07–0.14 stud | [M] Koyama |
@@ -153,6 +156,13 @@ Check these against slow-motion video before treating them as fact.
 22. Sasaki et al. 2011, "Relationship between performance and trunk movement during change of direction", JSSM 10 — https://www.jssm.org/jssm-10-112.xml
 23. SimpliFaster, "Deconstructing performance training: basketball defense" — https://simplifaster.com/articles/deconstructing-preformance-training-basketball-defense/
 24. Calgary SHRed, side shuffles — https://ucalgary.ca/shred-injuries/all-sports/volleyball/side-shuffles
+
+Added 2026-10-22 (base that opens and closes, low hips, low ball):
+
+25. Active.com, "The Basic Shuffle Dribble" (re-read in full): front foot slides out "with almost no space between the floor and the foot", then the rear foot is brought "up close to the front foot"; thighs "at a forty-five degree angle to the court"; shoulders level ("a full glass of water"); dribble hand "roughly midway between your front foot and your rear foot", ball "no higher than your knees"; free arm out ~45° and bent 90° as a shield — https://www.active.com/basketball/articles/the-basic-shuffle-dribble-2
+26. Coaches Insider, "5 drills to improve your lateral quickness": "keeping your hips low and square", move the feet "smoothly", "Your feet should never cross!" — https://coachesinsider.com/mens-basketball/5-drills-to-improve-your-lateral-quickness-for-basketball-article/
+27. OPEN Phys Ed, Basketball skill cue cards (snippet): defensive slide = "lead foot step", "push and shuffle with the trail leg", "fast, explosive feet" — https://openphysed.org/wp-content/uploads/2019/01/M-12-07-Basketball-SkillCueCards.pdf
+28. VertiMax, basketball dribbling drills: lateral dribble out and back to cones, left to right — https://vertimax.com/blog/basketball-dribbling-drills
 
 ## 3. Backpedal (retreat dribble)
 
@@ -372,11 +382,11 @@ Check these against slow-motion video before treating them as fact.
 
 | What | Real | Rig | Tag |
 |---|---|---|---|
-| Distance (compact) | 0.3–0.4 H (full NBA version 0.65–0.8 H) | ≤ 2 studs (the game's one-step limit) | [C]+[E] |
-| Direction | ~45° back and away from the defender | — | [C] |
+| Distance | ~6 ft of space (Harden, Second Spectrum tracking) | ≈ 4.6 studs (~5.4 ft; `STEPBACK_SPEED` × `STEPBACK_STEP_TIME` + slow-down), a little under the measured 6 ft after play-testing | [M] (ref 28) |
+| Direction | ~45° back and away from the defender | 30° toward the ball side (`STEPBACK_ANGLE`) | [C] (ref 29) |
 | Push foot | the lead (front) foot on the dribble-hand side | — | [C] |
-| Landing | back foot first, then the lead foot 0.08–0.15 s later, on the balls of the feet; stance width ~0.26 H | ≈ 1.4 studs | [C]+[E] |
-| Hop | low and flat (apex 0.03 H), flight 0.15–0.22 s; hips stay level (no pop-up) | apex ≈ 0.1 stud | [D]+[C] |
+| Landing | balanced, ball in the shooting pocket as the feet touch; then straight up for the shot. The game uses a one-foot bound (back foot first, front foot 0.12 s later), the user's choice over the drills' two-foot landing | back foot reaches 0.5 stud behind the stance | [C] (refs 29, 30) + play-test |
+| Hop | off the front foot, the back foot taking the big hop; hips kept low ("drop your hips"), flight 0.15–0.22 s | hips rise ~0.25 stud | [C]+[D] (ref 29) |
 | Trunk | 20–30° forward at the plant, 10–20° on landing; never leans back; shoulders turn 15–20° | — | [C] |
 | Ball | a pound at the plant, snatched back on its front-top, bounces between the feet on the side away from the defender, slightly toward the lead foot | — | [C] |
 
@@ -408,6 +418,13 @@ Check these against slow-motion video before treating them as fact.
 25. "Learn 3 Different Types of Step Back Moves with Jordan Lawley" — https://www.youtube.com/watch?v=GxDiMyN9LBE
 26. "HOW TO – Punch Dribble Side Step FOOTWORK" — https://www.youtube.com/watch?v=Af9vRV-Qf0o
 27. "3 Moves to Improve Your Stepback Jumper" — https://www.youtube.com/watch?v=Q41TgJNulYY ; also https://www.youtube.com/watch?v=vmgJHzwKsKo , https://www.youtube.com/watch?v=NDc8W_P5LtI , https://www.youtube.com/watch?v=c-7WeMeQcE8
+
+Added 2026-10-22 (the step-back is a real hop covering ground; the earlier "≤ 2 studs, flat hop" targets were replaced after play-testing felt like walking backwards):
+
+28. ESPN, "These step-back 3s sent another planet" (search snippet): "On average, the Harden step-back creates about 6 feet of shooting space, per Second Spectrum data" — https://www.espn.co.uk/nba/story/_/id/26118445/these-step-back-3s-sent-another-planet
+29. US Sports Camps / Nike, "The Kobe Step-Back Drill": "push off your front foot", "push back and hop at a 45 angle, land on 2 feet", "Drop your hips, the higher you stand the harder it is!", "get the ball into your shooting pocket as your feet touch the ground", "explode straight up to shoot" — https://www.ussportscamps.com/tips/basketball/nike-basketball-camps-present-the-kobe-step-back-drill
+30. CoachUp, "Basketball Tips: The Step Back" (Brandon Ball): plant the inside foot and step back to "create as much space as possible"; "land on both feet and make sure you're on balance"; "jump straight up, straight down" — https://www.coachup.com/nation/?p=1736
+31. Dr. Dish, "Shooting footwork: 1-2 vs. the hop": the two-foot hop lands "with an equal amount of power" on both legs and can give a quicker release; coaches favour it on the move — https://blog.drdishbasketball.com/basketball-shooting-footwork-1-2-vs.-the-hop
 
 ## 9. Spin (reverse pivot)
 

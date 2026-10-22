@@ -29,12 +29,12 @@ Start from the built place rather than a Studio template, so there's no Baseplat
 | `H` | Quick hand switch |
 | Flick toward the empty hand | Wide (Iverson-style) crossover |
 | Flick toward the hand with the ball | Stab dribble: a hard dribble out to that side, stepping that way |
-| Flick backward | Step-back |
+| Flick backward | Step-back: a one-foot bound back and to the ball side (~5 ft): the back foot hops, the front foot follows. For a step-back jumper, step back then press `E` (it rises straight up) |
 | Draw a circle (a quick half circle is enough) | 360 spin (reverse pivot): the ball hand pulls the ball round and bounces it as the turn ends, then the other hand takes it (clockwise circle = clockwise spin) |
 
 Mouse/trackpad moves need no button: flick or circle quickly; slow movement does nothing. Each move takes at most one short step. The mouse is locked in the middle of the screen (shown by a crosshair dot) and the game reads how far it moves; press Esc to get the pointer back.
 
-The body animates procedurally, after real basketball footwork (`Config/Footwork`): a low dribbling stance (knees bent, chest over the ball, ball-side foot back, free arm up as an arm bar), a shuffle sideways that never crosses the feet, a backpedal, the crossover's jab and push-off, the stab's push-pull step, the step-back's "1-2" landing and the spin's pivot foot and swing leg. Running forward uses Roblox's run animation. In Studio you can try a move from the command bar (client view): `game.ReplicatedStorage.RoHoopsPerformMove:Fire("Spin", -1)`, or a dunk (as if double-clicked): `game.ReplicatedStorage.RoHoopsDunk:Fire()`.
+The body animates procedurally, after real basketball footwork (`Config/Footwork`): a low dribbling stance (knees bent, chest over the ball, ball-side foot back, free arm up as an arm bar), a shuffle sideways that never crosses the feet, a backpedal, the crossover's jab and push-off, the stab's push-pull step, the step-back's one-foot bound and the spin's pivot foot and swing leg. Running forward uses Roblox's run animation. In Studio you can try a move from the command bar (client view): `game.ReplicatedStorage.RoHoopsPerformMove:Fire("Spin", -1)`, or a dunk (as if double-clicked): `game.ReplicatedStorage.RoHoopsDunk:Fire()`.
 
 What `E` does depends on where you are and how you're moving when you press it:
 
@@ -42,8 +42,8 @@ What `E` does depends on where you are and how you're moving when you press it:
 |---|---|
 | Standing still | Jump shot |
 | Moving toward the rim | Pull-up |
-| Walking away from the rim | Fadeaway |
-| Running away from the rim | Step-back |
+| Walking away from the rim | Jump shot (straight up) |
+| Sprinting (Shift) away from the rim | Fadeaway |
 | Moving mostly sideways | Side shot |
 | Within 8 ft, moving toward the rim | Layup |
 | Within 10 ft walking / 15 ft running, heading mostly toward the rim | Layup: you drive in at your own speed for the gather steps first |

@@ -47,6 +47,11 @@ local Ball = {
 	DRIBBLE_RELEASE_HEIGHT = 1.3, -- where the hand lets go of it (≈ 0.34 of body height)
 	DRIBBLE_RUN_CATCH_HEIGHT = 2.1, -- the catch height at full speed (the ball is kept higher when running)
 	DRIBBLE_HEIGHT_SPEED = 18, -- speed (studs/s) at which the catch height reaches DRIBBLE_RUN_CATCH_HEIGHT
+	-- Shuffling sideways the dribble stays low: "no higher than your knees" (research,
+	-- docs/MOVEMENT_REFERENCES.md section 2). The catch height eases to this as the sideways
+	-- speed beats the forward/back speed by DRIBBLE_SHUFFLE_SPEED studs/s.
+	DRIBBLE_SHUFFLE_CATCH_HEIGHT = 1.25,
+	DRIBBLE_SHUFFLE_SPEED = 4,
 	DRIBBLE_RIDE_UP = 0.15, -- how far the hand rides the ball up after meeting it, studs
 	DRIBBLE_RIDE_SHARE = 0.3, -- share of the contact time spent riding up (the rest is the push down), 0-1
 	DRIBBLE_CONTACT_SHARE = 0.55, -- share of the cycle the hand is on the ball (0.39 s of 0.6 s in the research), 0-1

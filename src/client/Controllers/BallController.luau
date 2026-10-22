@@ -575,11 +575,13 @@ local function updateDribble(dt: number, rootCFrame: CFrame, floorY: number)
 	end
 	rate *= 1 + jitterRate
 
-	-- The shape of this bounce: higher the faster you go.
+	-- The shape of this bounce: higher the faster you go, but kept low when shuffling sideways.
 	local heightShare = math.clamp(speed / math.max(Ball.DRIBBLE_HEIGHT_SPEED, 1), 0, 1)
-	local catch = (
-		Ball.DRIBBLE_CATCH_HEIGHT + (Ball.DRIBBLE_RUN_CATCH_HEIGHT - Ball.DRIBBLE_CATCH_HEIGHT) * heightShare
-	) * (1 + jitterHeight)
+	local shuffleShare =
+		math.clamp((math.abs(sideSpeed) - math.abs(forwardSpeed)) / math.max(Ball.DRIBBLE_SHUFFLE_SPEED, 0.1), 0, 1)
+	local speedCatch = Ball.DRIBBLE_CATCH_HEIGHT
+		+ (Ball.DRIBBLE_RUN_CATCH_HEIGHT - Ball.DRIBBLE_CATCH_HEIGHT) * heightShare
+	local catch = (speedCatch + (Ball.DRIBBLE_SHUFFLE_CATCH_HEIGHT - speedCatch) * shuffleShare) * (1 + jitterHeight)
 	local cycle = 1 / rate
 	local profile = SkillMath.dribbleProfile({
 		floor = Ball.RADIUS,

@@ -18,7 +18,7 @@
 local ShotMath = {}
 
 -- Every shot type. Each one must have a matching entry in Config/Shooting.luau `Types`.
-export type ShotType = "JumpShot" | "PullUp" | "Fadeaway" | "StepBack" | "SideShot" | "Layup" | "CloseShot" | "Dunk"
+export type ShotType = "JumpShot" | "PullUp" | "Fadeaway" | "SideShot" | "Layup" | "CloseShot" | "Dunk"
 
 -- How a dunk is taken: on the run (one-foot takeoff off the left foot, from up to
 -- DUNK_RANGE_FT) or from a standstill right under the rim (deep two-foot takeoff).
@@ -96,8 +96,10 @@ function ShotMath.classify(context: ShotContext, config: ClassifyConfig): ShotTy
 	if lateral > math.abs(toward) then
 		return "SideShot"
 	end
+	-- Away from the rim: only sprinting back (Shift) fades away. Walking back is a plain jump
+	-- shot, as is a step-back (the dribble move, then E): you rise straight up.
 	if toward < 0 then
-		return if context.running then "StepBack" else "Fadeaway"
+		return if context.running then "Fadeaway" else "JumpShot"
 	end
 	return "PullUp"
 end

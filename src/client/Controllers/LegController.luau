@@ -20,8 +20,8 @@
 --              planted, so the knees bend, and the trunk hinges forward (PostureController
 --              .setDipHinge); then the legs drive back up into the takeoff. The feet are
 --              placed to suit where the body is going (the "gather"): under the hips for a
---              plain shot, a braking 1-2 for a pull-up, a hop back for a step-back, a side
---              step for a side shot. A layup plants the LEFT foot and swings the right knee up.
+--              plain shot, a braking 1-2 for a pull-up, a side step for a side
+--              shot. A layup plants the LEFT foot and swings the right knee up.
 --   Air      – knees slightly bent, toes pointed, feet under or a bit ahead of the hips
 --              (further ahead on a fadeaway). Layup: the right knee drives up while the left
 --              leg trails; a running dunk tucks the knees after the top of the jump. Just
@@ -64,7 +64,7 @@ type Phase = "Off" | "Dip" | "Air"
 type Side = GaitMath.Side
 
 -- What the feet do inside the dip (see startDip).
-export type GatherKind = "None" | "PullUp" | "StepBack" | "SideStep"
+export type GatherKind = "None" | "PullUp" | "SideStep"
 export type DipOptions = {
 	gather: GatherKind?, -- which 1-2 landing happens inside the dip (nil = "None")
 	drift: Vector3?, -- the flat world velocity the body has during the dip (nil = its current velocity)
@@ -700,33 +700,21 @@ function LegController.startDip(duration: number, motionStyle: Shooting.MotionSt
 			0,
 			0
 		)
-	elseif gather == "StepBack" or gather == "SideStep" then
-		-- The body hops back (or sideways) in the dip. The first foot to land is the BACK foot
-		-- (the ball-side one in the stance) or, sideways, the LEAD foot in the direction of
-		-- travel and it brakes; the other follows. Both land on the balls of the feet, under
-		-- where the hips end up, and the hips stay level.
+	elseif gather == "SideStep" then
+		-- The body hops sideways in the dip. The LEAD foot in the direction of travel lands
+		-- first and brakes; the other follows. Both land on the balls of the feet, under where
+		-- the hips end up, and the hips stay level.
 		local landed = hips + travel
-		local first: Side
-		local firstSpot: Vector3
-		local secondSpot: Vector3
-		if gather == "StepBack" then
-			first = ballHand
-			local second: Side = if first == "Right" then "Left" else "Right"
-			local stagger = Footwork.STAGGER / 2
-			firstSpot = landed + right * (GaitMath.sign(first) * halfWidth) - look * stagger
-			secondSpot = landed + right * (GaitMath.sign(second) * halfWidth) + look * stagger
-		else
-			first = if travel:Dot(right) >= 0 then "Right" else "Left"
-			firstSpot = landed + travelDir * (halfWidth + Footwork.SIDESTEP_LEAD_AHEAD)
-			secondSpot = landed - travelDir * halfWidth
-		end
+		local first: Side = if travel:Dot(right) >= 0 then "Right" else "Left"
+		local firstSpot = landed + travelDir * (halfWidth + Footwork.SIDESTEP_LEAD_AHEAD)
+		local secondSpot = landed - travelDir * halfWidth
 		local second: Side = if first == "Right" then "Left" else "Right"
-		planStep(first, firstSpot, 0, Footwork.STEPBACK_SHOT_FIRST_AT, -toePitch, -toePitch)
+		planStep(first, firstSpot, 0, Footwork.SIDESTEP_FIRST_AT, -toePitch, -toePitch)
 		planStep(
 			second,
 			secondSpot,
-			Footwork.STEPBACK_SHOT_FIRST_AT * 0.5,
-			Footwork.STEPBACK_SHOT_SECOND_AT,
+			Footwork.SIDESTEP_FIRST_AT * 0.5,
+			Footwork.SIDESTEP_SECOND_AT,
 			-toePitch,
 			-toePitch
 		)
@@ -1001,6 +989,10 @@ local function updateGround(parts: CharacterRef.Parts, dt: number, now: number, 
 		animationRunning = true
 	end
 	local goal = if approaching or (grounded and (scripted or not animationRunning)) then 1 else 0
+	local sideways = velocity:Dot(right)
+	local alongLook = velocity:Dot(look)
+	local shuffling = speed > 0.5 and math.abs(sideways) > math.abs(alongLook)
+	local backpedalling = speed > 0.5 and not shuffling and alongLook < -0.5
 
 	-- Hips: crouch into the stance (only while the footwork has the legs: the run animation
 	-- expects standing height). During an approach they drop for the gather step instead.
@@ -1011,7 +1003,10 @@ local function updateGround(parts: CharacterRef.Parts, dt: number, now: number, 
 		local drop = ease((elapsed - a.dropFrom) / math.max(a.dropTo - a.dropFrom, 0.05))
 		crouch = a.startCrouch + (Footwork.GATHER_HIP_DROP - a.startCrouch) * drop
 	else
-		local targetCrouch = (if hasBall then Footwork.DRIBBLE_CROUCH else Footwork.NO_BALL_CROUCH) * goal + moveCrouch
+		local shuffleCrouch = if shuffling and hasBall and not scripted then Footwork.SHUFFLE_CROUCH else 0
+		local targetCrouch = (if hasBall then Footwork.DRIBBLE_CROUCH else Footwork.NO_BALL_CROUCH) * goal
+			+ moveCrouch
+			+ shuffleCrouch
 		crouch += (targetCrouch - crouch) * MovementMath.smoothingAlpha(Footwork.CROUCH_SHARPNESS, dt)
 	end
 	local extraCrouch = landExtra(now)
@@ -1046,10 +1041,6 @@ local function updateGround(parts: CharacterRef.Parts, dt: number, now: number, 
 	local heading = flat(MovementController.getTargetVelocity())
 	local travelVelocity = if heading.Magnitude < speed then (velocity + heading) / 2 else velocity
 	local reach = currentReach(extraCrouch)
-	local sideways = velocity:Dot(right)
-	local alongLook = velocity:Dot(look)
-	local shuffling = speed > 0.5 and math.abs(sideways) > math.abs(alongLook)
-	local backpedalling = speed > 0.5 and not shuffling and alongLook < -0.5
 
 	-- The stance offset (x right, z forward from the hips) of `side`'s foot. `fresh` = use
 	-- the stagger the ball hand wants now; otherwise a hand switch's small change is ignored.
@@ -1109,6 +1100,13 @@ local function updateGround(parts: CharacterRef.Parts, dt: number, now: number, 
 		local foot = current[side]
 		local offset = stanceOffset(side, true)
 		foot.staggerZ = offset.Z - Footwork.FEET_FORWARD
+		if shuffling then
+			-- Step-slide: the lead foot reaches out wide, the trail foot slides in close to it
+			-- (keepApart stops them touching), so the base opens and closes each cycle.
+			local leads = (side == "Right") == (sideways > 0)
+			local widen = if leads then Footwork.SHUFFLE_LEAD_OUT else -Footwork.SHUFFLE_TRAIL_IN
+			offset += Vector3.new(GaitMath.sign(side) * widen, 0, 0)
+		end
 		local aim: Aim = {
 			offset = offset,
 			frame = nil,

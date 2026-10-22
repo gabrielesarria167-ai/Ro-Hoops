@@ -5,7 +5,7 @@
 --   Flick toward the empty hand    – Crossover: the wide, Allen Iverson style crossover.
 --   Flick toward the ball's hand   – Stab: a hard dribble out to that hand's side,
 --                                    stepping that way.
---   Flick backward                 – StepBack: one step back, pulling the ball with you.
+--   Flick backward                 – StepBack: a hop back, pulling the ball with you.
 --   Draw a circle (a quick half     – Spin: a 360 reverse pivot the way you drew it; the
 --   circle is enough)                  ball hand pulls the ball round, bounces it as the
 --                                    turn ends, and the other hand takes it off the bounce.
@@ -32,16 +32,18 @@
 --   Crossover – SELL: plant, lean over the ball and toward it. EXPLODE: whip the lean to
 --               the new side and take one step that way.
 --   Stab      – lean into the ball's side and step that way as the ball is pounded out.
---   StepBack  – plant, lean back, one step straight back.
+--   StepBack  – plant and load, lean back, then a one-foot bound back and to the ball side
+--               (a longer step than the rest): the back foot hops, the front foot follows.
 --   Spin      – plant (while the ball is pounded), bend low, then turn a full circle AROUND
 --               the planted pivot foot (the hips orbit it and drift Footwork.SPIN_TRAVEL
 --               toward its side); the head leads the turn.
 -- The feet are placed by LegController, following each move's real-life footwork
 -- (Config/Footwork.luau, MOVE FOOTWORK): e.g. the crossover's jab, head fake and push-off,
--- the step-back's flat hop and "1-2" landing, the spin's pivot foot (twisting on the ball
+-- the step-back's one-foot bound, the spin's pivot foot (twisting on the ball
 -- of the foot) and low swing leg. Move beat times come from Config/Skills.luau (the shared
 -- clock with BallController); foot and head values from Config/Footwork.luau.
--- Every move takes at most one step, then movement goes back to the keys. The body keeps
+-- Every move takes at most one step (the step-back's is a longer hop), then movement goes
+-- back to the keys. The body keeps
 -- facing the rim throughout (MovementController.faceRim), apart from the spin's turn,
 -- which sets the facing itself every frame and ends facing the same way it started.
 
@@ -113,6 +115,15 @@ local function plant() -- stop dead
 end
 local function stepToward(direction: Vector3) -- one quick step in a flat world direction
 	MovementController.setOverride(direction.Unit * Skills.STEP_SPEED, Skills.STEP_RATE)
+end
+-- The step-back's hop: longer and faster than a step, angled back toward `sideSign`'s side.
+local function hopBack(rootCFrame: CFrame, sideSign: number)
+	local angle = math.rad(Skills.STEPBACK_ANGLE)
+	local side, back = sideSign * math.sin(angle), -math.cos(angle)
+	MovementController.setOverride(
+		bodyVelocity(rootCFrame, side * Skills.STEPBACK_SPEED, back * Skills.STEPBACK_SPEED),
+		Skills.STEP_RATE
+	)
 end
 local function releaseFeet() -- movement back to the keys (no key held = slow to a stop)
 	MovementController.setOverride(nil)
@@ -276,12 +287,12 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 		local frontLeaves = plantTime + Footwork.STEPBACK_FRONT_FOOT_DELAY
 		local backLands = plantTime + Footwork.STEPBACK_BACK_FOOT_TIME
 		return {
-			{ -- Plant the front (off) foot hard and lean back.
+			{ -- Plant the front (off) foot hard, sink to load the hop and lean back.
 				at = 0,
 				run = function()
 					plant()
-					PostureController.leanTo(Skills.STEPBACK_LEAN, plantTime + Skills.STEP_TIME, 0)
-					scriptFeet(Footwork.STEPBACK_CROUCH)
+					PostureController.leanTo(Skills.STEPBACK_LEAN, plantTime + Skills.STEPBACK_STEP_TIME, 0)
+					scriptFeet(Footwork.STEPBACK_LOAD_CROUCH)
 					stepFoot(
 						-fromSign,
 						0,
@@ -291,36 +302,51 @@ local function beatsFor(move: SkillMath.Move, fromSign: number, spinSign: number
 					)
 				end,
 			},
-			{ -- Push back off it: one step straight back, landing on both feet, back (ball-
-				-- side) foot first...
+			{ -- Explode back off it: the hips spring up and the back (ball-side) foot takes the
+				-- big hop back, reaching behind the hips...
 				at = plantTime,
 				run = function(parts)
-					stepToward(bodyVelocity(parts.root.CFrame, 0, -1))
-					stepFoot(fromSign, 0, -stagger, Footwork.STEPBACK_BACK_FOOT_TIME, Footwork.STEPBACK_LIFT)
-				end,
-			},
-			{ -- ...then the front foot ("1-2"). Both feet are off the floor now: a low, flat hop
-				-- (the hips come up a little, but nowhere near a jump).
-				at = frontLeaves,
-				run = function()
-					stepFoot(-fromSign, 0, stagger, Footwork.STEPBACK_FRONT_FOOT_TIME, Footwork.STEPBACK_LIFT * 0.8)
+					hopBack(parts.root.CFrame, fromSign)
+					stepFoot(
+						fromSign,
+						0,
+						-stagger - Footwork.STEPBACK_REACH_BACK,
+						Footwork.STEPBACK_BACK_FOOT_TIME,
+						Footwork.STEPBACK_LIFT
+					)
 					LegController.setMoveCrouch(Footwork.STEPBACK_CROUCH - Footwork.STEPBACK_HOP_RISE)
 				end,
 			},
-			{ -- The back foot lands: the knees take the landing.
-				at = backLands,
+			{ -- ...while the front foot finishes its push, then slides back low behind it.
+				at = frontLeaves,
+				run = function()
+					stepFoot(-fromSign, 0, stagger, Footwork.STEPBACK_FRONT_FOOT_TIME, Footwork.STEPBACK_DRAG_LIFT)
+				end,
+			},
+			{ -- Top of the hop: the hips start coming back down for the landing.
+				at = plantTime + Footwork.STEPBACK_BACK_FOOT_TIME * 0.5,
 				run = function()
 					LegController.setMoveCrouch(Footwork.STEPBACK_CROUCH)
+				end,
+			},
+			{ -- The back foot lands and catches the body: the knees take the landing.
+				at = backLands,
+				run = function()
 					LegController.absorbLanding(Footwork.STEPBACK_LAND_STRENGTH)
 				end,
 			},
-			{ at = plantTime + Skills.STEP_TIME, run = releaseFeet },
+			{ at = plantTime + Skills.STEPBACK_STEP_TIME, run = releaseFeet },
 			{
 				at = math.max(backLands, frontLeaves + Footwork.STEPBACK_FRONT_FOOT_TIME),
 				run = unscriptFeet,
 			},
 		},
-			math.max(Skills.STEPBACK_PULL_TIME + Skills.STEPBACK_RISE_TIME, plantTime + Skills.STEP_TIME)
+			-- (over once the trailing front foot is down too)
+			math.max(
+				Skills.STEPBACK_PULL_TIME + Skills.STEPBACK_RISE_TIME,
+				plantTime + Skills.STEPBACK_STEP_TIME,
+				frontLeaves + Footwork.STEPBACK_FRONT_FOOT_TIME
+			)
 	elseif move == "Spin" then
 		local gather, spinTime = Skills.SPIN_GATHER_TIME, Skills.SPIN_TIME
 		-- The pivot foot is on the side the body drifts toward: a clockwise spin (spinSign -1)

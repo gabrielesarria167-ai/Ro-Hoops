@@ -15,8 +15,7 @@
 -- released just after the top of the jump, mid-range at it, long shots just before it.)
 --
 -- Drift is split in two: DIP_DRIFT / DIP_LATERAL_DRIFT is the body's velocity while it
--- gathers on the ground (a pull-up brakes to a stop, a step-back hops back, a side shot
--- steps sideways), DRIFT / LATERAL_DRIFT is the (small) velocity it carries through the air.
+-- gathers on the ground (a pull-up brakes to a stop, a side shot steps sideways), DRIFT / LATERAL_DRIFT is the (small) velocity it carries through the air.
 --
 -- Live-tunable under ReplicatedStorage > Tuning > Shooting while playing in Studio.
 
@@ -34,9 +33,8 @@ export type MotionStyle = "JumpShot" | "Layup" | "Dunk"
 -- How the feet land in the gather (LegController.startDip's `gather` option):
 --   "None"     – both feet plant together under the body
 --   "PullUp"   – braking 1-2 steps after a run: one foot lands ahead, the other steps in
---   "StepBack" – the body hops back: the back foot lands first, the front foot second
---   "SideStep" – the same sideways: the leading foot lands first, the other shoulder-width away
-export type GatherKind = "None" | "PullUp" | "StepBack" | "SideStep"
+--   "SideStep" – the body hops sideways: the leading foot lands first, the other shoulder-width away
+export type GatherKind = "None" | "PullUp" | "SideStep"
 
 -- The settings every shot type has (see `Types` at the bottom of this file).
 export type ShotTypeConfig = {
@@ -53,7 +51,7 @@ export type ShotTypeConfig = {
 	-- shorter dip than the default. Leave out to use the default.
 	MIN_DIP_TIME: number?,
 	-- Speed toward the rim while gathering on the ground (the dip), studs/s. Negative =
-	-- moving away from the rim (a step-back hops back during the dip).
+	-- moving away from the rim.
 	DIP_DRIFT: number,
 	-- Sideways speed while gathering, in the direction you were moving, studs/s (a side
 	-- shot's step to the side).
@@ -242,7 +240,7 @@ local Shooting = {
 			LEAN = 0,
 			SIDE_LEAN = 0,
 		},
-		-- Walking away from the rim. You rise straight up, then fall back ~1 stud, leaning
+		-- Sprinting (Shift) away from the rim. You rise straight up, then fall back ~1 stud, leaning
 		-- ~14° away from the rim (research: 12-15°), and shoot with a higher arc over the defender.
 		Fadeaway = {
 			LABEL = "Fadeaway",
@@ -259,25 +257,6 @@ local Shooting = {
 			DIFFICULTY = 1.3,
 			MOTION = "JumpShot",
 			LEAN = 14, -- total trunk tilt back; PostureController shares it out between hips and chest
-			SIDE_LEAN = 0,
-		},
-		-- Running (Shift) away from the rim. You hop back DURING the dip (about one step,
-		-- ~1.5 studs), then jump straight up.
-		StepBack = {
-			LABEL = "Step-back",
-			FILL_TIME = 0.48,
-			JUMP_POWER = 12, -- dip ~0.22 s
-			APEX_OFFSET = 0,
-			DIP_DRIFT = -8,
-			DIP_LATERAL_DRIFT = 0,
-			DRIFT = -1,
-			LATERAL_DRIFT = 0,
-			GATHER = "StepBack",
-			DIP_DEPTH_SCALE = 1,
-			ARC_HEIGHT = 2.8,
-			DIFFICULTY = 1.35,
-			MOTION = "JumpShot",
-			LEAN = 0, -- upright at the release
 			SIDE_LEAN = 0,
 		},
 		-- Moving mostly sideways. You step sideways DURING the dip (~1.2 studs), then rise
@@ -297,7 +276,10 @@ local Shooting = {
 			DIFFICULTY = 1.25,
 			MOTION = "JumpShot",
 			LEAN = 0,
-			SIDE_LEAN = 4, -- tilts 4° toward the sideways drift (research: trunk 0-5° at release)
+			-- Degrees the trunk tilts toward the sideways drift. Research says only 0-5° at the
+			-- release, but that barely shows; Posture.SHOT_SHOULDER_LEVEL takes some back, so
+			-- 16 looks like ~12° of bend.
+			SIDE_LEAN = 23,
 		},
 		-- Moving toward the rim inside the layup range. You take off from the left foot, drive
 		-- the right knee up, and lay the ball in off an extended right arm.

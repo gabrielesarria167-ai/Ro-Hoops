@@ -82,8 +82,14 @@ local Footwork = {
 
 	-- Step-slide (sideways): the lead foot (the side you travel toward) always steps first and
 	-- the trail foot leaves once the lead step is this share through, low over the floor.
+	-- Research (docs/MOVEMENT_REFERENCES.md section 2): the lead foot steps out, the trail foot
+	-- is brought up close to it as soon as it lands, never crossing; hips low and square.
 	SHUFFLE_TRAIL_DELAY = 0.45,
 	SHUFFLE_LIFT = 0.07, -- studs a shuffling foot rises (research clearance 0.05-0.1)
+	SHUFFLE_LEAD_OUT = 0.3, -- the lead foot lands this many studs wider than the stance
+	SHUFFLE_TRAIL_IN = 0.3, -- the trail foot lands this many studs narrower (closing the base)
+	-- Extra studs lower while shuffling with the ball (research: "thighs at 45° to the court").
+	SHUFFLE_CROUCH = 0.1,
 
 	-- Backpedal: short steps (studs, at most) landing toe first, then the heel comes down.
 	BACKPEDAL_MAX_STEP = 0.9,
@@ -150,10 +156,10 @@ local Footwork = {
 	PULLUP_BRAKE_LAND_AT = 0.25, -- share of the dip when the braking foot touches down
 	PULLUP_SECOND_FOOT_AT = 0.45, -- share of the dip when the second foot lands
 	PULLUP_BRAKE_TOE_UP = 20, -- degrees the braking foot's toe is up when it lands (heel first)
-	-- Step-back and side-step shots: the body hops back (or sideways) in the dip; the first
-	-- foot lands at ..._FIRST_AT of the dip (back foot / lead foot), the second at ..._SECOND_AT.
-	STEPBACK_SHOT_FIRST_AT = 0.35,
-	STEPBACK_SHOT_SECOND_AT = 0.7,
+	-- Side shot: the body hops sideways in the dip; the lead foot lands at SIDESTEP_FIRST_AT
+	-- of the dip, the other at SIDESTEP_SECOND_AT.
+	SIDESTEP_FIRST_AT = 0.35,
+	SIDESTEP_SECOND_AT = 0.7,
 	BALL_OF_FOOT_PITCH = 15, -- degrees the heel is raised in these landings (on the balls of the feet)
 	SIDESTEP_LEAD_AHEAD = 0.3, -- the lead foot of a side-step lands this far beyond where the hips end up
 
@@ -248,17 +254,28 @@ local Footwork = {
 	STAB_TRAIL_TIME = 0.16,
 	STAB_CROUCH = 0.15,
 
-	-- Step-back (Harden style): plant the front (off) foot hard, then push back off it and
-	-- land on both feet, back foot first ("1-2"), with a low flat hop between.
+	-- Step-back (Harden style), a one-foot bound: plant the front (off) foot hard and load
+	-- the legs, then push off it; the BACK foot does the big hop back, reaching behind the
+	-- hips to catch the body, and the front foot slides back low and lands last ("1-2").
 	STEPBACK_PLANT_FORWARD = 0.4, -- how far forward the front foot plants
 	STEPBACK_PLANT_FOOT_TIME = 0.1, -- seconds the front foot takes to plant (longer than a snap)
-	STEPBACK_BACK_FOOT_TIME = 0.26, -- seconds for the back foot's step
-	STEPBACK_FRONT_FOOT_DELAY = 0.1, -- front foot leaves this long after the back foot
-	STEPBACK_FRONT_FOOT_TIME = 0.24,
-	STEPBACK_LIFT = 0.3,
-	STEPBACK_CROUCH = 0.15,
-	STEPBACK_HOP_RISE = 0.08, -- studs the hips come up while both feet are off the floor (a flat hop)
-	STEPBACK_LAND_STRENGTH = 0.3, -- landing absorption (0-1) when the back foot comes down
+	STEPBACK_LOAD_CROUCH = 0.3, -- extra studs lower while planted, loading the hop
+	STEPBACK_BACK_FOOT_TIME = 0.22, -- seconds for the back foot's hop (its landing catches the body)
+	STEPBACK_LIFT = 0.5, -- studs the back foot rises mid-hop
+	-- The back foot lands this many studs further behind the hips than in the stance, so it
+	-- reaches back and catches the body (higher = a longer-looking stride).
+	STEPBACK_REACH_BACK = 0.5,
+	-- The front foot keeps pushing this long after the back foot leaves (keep it short, or the
+	-- body travels out of the planted leg's reach), then slides back low...
+	STEPBACK_FRONT_FOOT_DELAY = 0.06,
+	-- ...over this many seconds. It lands DELAY + TIME - BACK_FOOT_TIME (0.12 s) after the back foot.
+	STEPBACK_FRONT_FOOT_TIME = 0.28,
+	STEPBACK_DRAG_LIFT = 0.1, -- studs the front foot rises as it slides back (low: it follows, it doesn't hop)
+	STEPBACK_CROUCH = 0.15, -- extra studs lower after landing
+	-- Studs the hips aim to rise above STEPBACK_CROUCH at the top of the hop (they're eased,
+	-- so they really rise ~2/3 of this). Higher = a bouncier hop.
+	STEPBACK_HOP_RISE = 0.6,
+	STEPBACK_LAND_STRENGTH = 0.6, -- landing absorption (0-1) when the back foot comes down
 
 	-- Spin (reverse pivot): the body turns around the ball of the front (pivot) foot, which
 	-- stays planted and twists on the spot; the other leg swings round low and lands before

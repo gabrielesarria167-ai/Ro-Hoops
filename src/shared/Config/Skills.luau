@@ -14,7 +14,7 @@
 --   draw a circle (or a quick U) → 360 spin (clockwise circle = clockwise spin)
 --   H key                       → quick hand switch (Config/Ball.luau, SWITCH_...)
 -- Every move takes at most ONE short step (see FOOTWORK), so moves can be chained without
--- carrying the player across the court. Live-tunable under ReplicatedStorage > Tuning > Skills.
+-- carrying the player across the court. The step-back is the exception: a longer hop back. Live-tunable under ReplicatedStorage > Tuning > Skills.
 
 local Skills = {
 	-- FLICK DETECTION -------------------------------------------------------------------
@@ -114,12 +114,24 @@ local Skills = {
 	WIDE_STEP_FORWARD = 0.15,
 
 	-- STEP-BACK (flick backward) ------------------------------------------------------------
-	-- Plant, lean back a little, and take one step straight back (see FOOTWORK) while the
-	-- ball is pulled back with you: it bounces just in front of the hips, then comes up
-	-- into the same hand. Good for creating space before a shot.
-	STEPBACK_PLANT_TIME = 0.06, -- seconds planted before the step back
-	STEPBACK_PULL_TIME = 0.14, -- seconds for the ball to be pulled back and down to its bounce
-	STEPBACK_RISE_TIME = 0.16, -- seconds for it to come back up into the hand
+	-- Plant and load, push off the front foot and bound back diagonally to the ball's side:
+	-- the back foot takes the big hop and lands first, the front foot slides back after it.
+	-- The ball is pulled back with you, bounces just in front of the hips and is back in the
+	-- hand as you land. Then E for
+	-- the step-back jumper (straight up). Research: docs/MOVEMENT_REFERENCES.md section 8.
+	-- Unlike the other moves it has its own, bigger step.
+	STEPBACK_PLANT_TIME = 0.1, -- seconds planted (loading the legs) before the hop
+	-- The hop: this speed for this long, then the usual slow-down. 19 for 0.24 s covers
+	-- ~4.6 studs (~5.4 ft) counting the speed-up and slow-down (STEP_RATE). Higher = further.
+	-- Research: Second Spectrum measured ~6 ft of space created by Harden's step-back (22
+	-- gives that; play-testing preferred slightly less).
+	STEPBACK_SPEED = 19,
+	STEPBACK_STEP_TIME = 0.24,
+	-- Degrees the hop angles off straight back, toward the ball's side (0 = straight back).
+	-- Coaching drills say ~45°; less keeps a backward flick feeling like "back".
+	STEPBACK_ANGLE = 30,
+	STEPBACK_PULL_TIME = 0.18, -- seconds for the ball to be pulled back and down to its bounce
+	STEPBACK_RISE_TIME = 0.16, -- seconds for it to come back up into the hand (~as you land)
 	-- Where it bounces: between the feet, inside the ball-side foot and a little ahead (away
 	-- from the "defender"), clear of the foot. (out, forward) in studs from the hips.
 	STEPBACK_BOUNCE_OUT = 0.55,

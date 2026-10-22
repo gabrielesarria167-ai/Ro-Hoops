@@ -2,12 +2,12 @@
 -- SHOT CONTROLLER (the E key, and double-click to dunk)
 -- Pressing E:
 --   1. picks the shot type from your position and movement (ShotMath.classify):
---      jump shot, pull-up, fadeaway, step-back, side shot, layup or close shot,
+--      jump shot, pull-up, fadeaway, side shot, layup or close shot,
 --   2. starts the timing meter, eases your momentum into the shot's DIP drift, turns you
 --      smoothly to face the rim (a jump shooter stands turned SHOT_BODY_YAW to one side),
 --      and starts the shooting motion: knees dip (LegController) while the ball comes up
 --      to the forehead (BallController.hold). The dip's footwork depends on the shot: a
---      pull-up brakes to a stop, a step-back hops back, a side shot steps sideways (the
+--      pull-up brakes to a stop, a side shot steps sideways (the
 --      "gather" option of LegController.startDip). A layup or running dunk from further
 --      out first DRIVES IN at your own speed (LegController.startApproach: the running
 --      gather steps, with the ball gathered in both hands) and only then dips; the meter
@@ -16,7 +16,7 @@
 --      release comes APEX_OFFSET seconds after the top of the jump: at it for most shots,
 --      just after for a close shot, just before for a layup. In the air the body carries
 --      the shot type's (small) air DRIFT, and leans by LEAN (a fadeaway tilts back ~14°)
---      and SIDE_LEAN (a side shot tilts ~4° sideways, the same way it steps), fully
+--      and SIDE_LEAN (a side shot tilts ~12° sideways, the same way it steps), fully
 --      leaned at the perfect release (PostureController.leanTo).
 -- Drift is split in two: DIP_DRIFT is the body's velocity while it gathers on the ground
 -- (the feet follow it), DRIFT is the velocity it carries after takeoff.
