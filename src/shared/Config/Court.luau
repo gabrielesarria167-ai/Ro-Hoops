@@ -7,9 +7,10 @@
 -- stretches toward +Z. "Toward the rim" therefore means toward -Z.
 
 -- How many studs one real foot is. The avatar stands 5.11 studs from the floor to the top
--- of its head (measured in Studio, rest pose) and counts as 5'5", so 5.11 / (65 / 12) =
--- 0.943. Change this to rescale the whole court, hoop and ball relative to players.
-local STUDS_PER_FOOT = 0.943
+-- of its head (measured in Studio, rest pose) and counts as 5'0", so 5.11 / 5 = 1.022.
+-- Change this to rescale the whole court and hoop relative to players (the ball keeps
+-- its own size, Config/Ball.luau RADIUS).
+local STUDS_PER_FOOT = 1.022
 
 -- Converts real feet to studs, e.g. ft(10) = rim height in studs.
 local function ft(feet: number): number
@@ -23,10 +24,10 @@ end
 local EQUIPMENT_SCALE = 1.3
 
 -- Raises the rim and backboard above their true height (only heights change; distances,
--- ball and rim size do not). 1 = true scale: a 10 ft rim (8.5 studs) over a ~5.3 stud
--- (6'3") avatar, the real rim-to-player height ratio. Roblox avatars have long arms and
+-- ball and rim size do not). 1 = true scale: a 10 ft rim (10.2 studs) over the 5.11 stud
+-- (5'0") avatar, the real rim-to-player height ratio. Roblox avatars have long arms and
 -- a big jump for their height, so if layups start feeling like dunks, raise this a little
--- (1.25 = about 10.6 studs) rather than shrinking the court.
+-- (1.1 = about 11.2 studs) rather than shrinking the court.
 local RIM_HEIGHT_SCALE = 1
 
 local Court = {

@@ -382,7 +382,7 @@ Added 2026-10-22 (base that opens and closes, low hips, low ball):
 
 | What | Real | Rig | Tag |
 |---|---|---|---|
-| Distance | ~6 ft of space (Harden, Second Spectrum tracking) | ≈ 4.6 studs (~5.4 ft; `STEPBACK_SPEED` × `STEPBACK_STEP_TIME` + slow-down), a little under the measured 6 ft after play-testing | [M] (ref 28) |
+| Distance | ~6 ft of space (Harden, Second Spectrum tracking) | ≈ 4.6 studs (~4.5 ft for the 5'0" avatar; `STEPBACK_SPEED` × `STEPBACK_STEP_TIME` + slow-down), about Harden's 6 ft scaled to body height | [M] (ref 28) |
 | Direction | ~45° back and away from the defender | 30° toward the ball side (`STEPBACK_ANGLE`) | [C] (ref 29) |
 | Push foot | the lead (front) foot on the dribble-hand side | — | [C] |
 | Landing | balanced, ball in the shooting pocket as the feet touch; then straight up for the shot. The game uses a one-foot bound (back foot first, front foot 0.12 s later), the user's choice over the drills' two-foot landing | back foot reaches 0.5 stud behind the stance | [C] (refs 29, 30) + play-test |

@@ -3,7 +3,7 @@
 -- Everything about the test ball: how it looks, how it bounces, where it sits while you
 -- dribble or gather a shot, and the rules that decide when a shot is over.
 --
--- Units: distances are in studs (Roblox's unit, 1 stud ≈ 1.06 ft at our scale), times in
+-- Units: distances are in studs (Roblox's unit, 1 stud ≈ 0.98 ft at our scale), times in
 -- seconds. Live-tunable in Studio under ReplicatedStorage > Tuning > Ball while playing.
 
 local Ball = {

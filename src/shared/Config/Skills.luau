@@ -122,7 +122,7 @@ local Skills = {
 	-- Unlike the other moves it has its own, bigger step.
 	STEPBACK_PLANT_TIME = 0.1, -- seconds planted (loading the legs) before the hop
 	-- The hop: this speed for this long, then the usual slow-down. 19 for 0.24 s covers
-	-- ~4.6 studs (~5.4 ft) counting the speed-up and slow-down (STEP_RATE). Higher = further.
+	-- ~4.6 studs (~4.5 ft) counting the speed-up and slow-down (STEP_RATE). Higher = further.
 	-- Research: Second Spectrum measured ~6 ft of space created by Harden's step-back (22
 	-- gives that; play-testing preferred slightly less).
 	STEPBACK_SPEED = 19,
