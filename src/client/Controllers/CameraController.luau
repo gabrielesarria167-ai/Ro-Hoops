@@ -8,6 +8,11 @@
 --     directions from the camera): left/right is a straight shuffle, not a circle round
 --     the rim, and you can see the side of the court you're moving toward.
 --     (RIM_FOLLOW = 1 gives the old full lock: always facing the rim, left/right circle it.)
+--   * when the rim and the player are far apart on screen (narrow screens, behind the
+--     baseline) it turns and, if needed, zooms out so both stay in view; if they still
+--     don't fit, the player wins (Camera.RIM_EDGE_MARGIN, Camera.MAX_FIELD_OF_VIEW);
+--   * behind the baseline it fades the backboard and stanchion so they don't hide the
+--     player (Camera.BEHIND_BOARD_FADE).
 -- The player can't rotate it: the mouse is kept for dribble moves (SkillController).
 -- Tuning values: src/shared/Config/Camera.luau.
 
@@ -26,6 +31,8 @@ local smoothedPosition: Vector3? = nil
 -- Flat direction from the rim out to the player (the camera sits further along it). Kept
 -- from the last frame when the player stands right under the rim, where it's undefined.
 local orbitDirection = Vector3.zAxis
+-- How faded the backboard and stanchion are right now, 0 to BEHIND_BOARD_FADE (smoothed).
+local structureFade = 0
 
 -- The flat direction the camera sits along: from the rim out to `player`, swung back inside
 -- MAX_ORBIT_ANGLE (so it never goes round behind the backboard), then only RIM_FOLLOW of
@@ -69,12 +76,52 @@ local function step(dt: number)
 	local position = if smoothedPosition then smoothedPosition:Lerp(desiredPosition, alpha) else desiredPosition
 	smoothedPosition = position
 
+	-- Behind the baseline the camera looks back through the backboard and stanchion, which
+	-- would hide the player: fade them (on this screen only) while the player is back there.
+	-- The rim and net are their own model (Hoop.Rim), so they stay solid.
+	local fadeTarget = if player.Z < Court.BASELINE_Z then Camera.BEHIND_BOARD_FADE else 0
+	structureFade += (fadeTarget - structureFade) * alpha
+	local hoop = workspace:FindFirstChild("Hoop")
+	if hoop then
+		for _, part in hoop:GetChildren() do
+			if part:IsA("BasePart") then
+				part.LocalTransparencyModifier = structureFade
+			end
+		end
+	end
+
 	-- Look straight ahead along orbitDirection at a point level with the rim and as far
 	-- ahead as the rim is (with RIM_FOLLOW = 1 that point IS the rim), then tilt down by
 	-- RIM_ABOVE_CENTER so the rim sits that far above the middle of the screen and the
 	-- player fits below it.
 	local rimDistance = (Vector3.new(rim.X, 0, rim.Z) - flatPlayer).Magnitude
 	local lookAt = flatPlayer - orbitDirection * rimDistance + Vector3.yAxis * rim.Y
+
+	-- Keep both the rim and the player on screen, RIM_EDGE_MARGIN in from the sides. Narrow
+	-- screens see less sideways (FieldOfView is vertical), and behind the baseline the camera
+	-- ends up beside the rim with the player off to the other side. So: turn just enough to
+	-- fit both, widening the view (up to MAX_FIELD_OF_VIEW) when they're too far apart to fit;
+	-- if even that isn't enough, the player stays in view and the rim goes.
+	-- Spinning `forward` round the vertical axis keeps its tilt, so the rim height is unchanged.
+	local viewport = camera.ViewportSize
+	local aspect = viewport.X / math.max(viewport.Y, 1)
+	-- Half the screen's width as an angle, for a vertical field of view of `fov` degrees.
+	local function halfWidth(fov: number): number
+		return math.atan(math.tan(math.rad(fov) / 2) * aspect)
+	end
+	local forward, toRim, toPlayer = lookAt - position, rim - position, player - position
+	local rimBearing = MovementMath.flatBearing(forward.X, forward.Z, toRim.X, toRim.Z)
+	local playerBearing = MovementMath.flatBearing(forward.X, forward.Z, toPlayer.X, toPlayer.Z)
+	local margin = math.rad(Camera.RIM_EDGE_MARGIN)
+	local half = math.clamp(
+		math.abs(rimBearing - playerBearing) / 2 + margin, -- half-width that fits both
+		halfWidth(Camera.FIELD_OF_VIEW),
+		halfWidth(Camera.MAX_FIELD_OF_VIEW)
+	)
+	camera.FieldOfView = math.deg(2 * math.atan(math.tan(half) / aspect))
+	local extraYaw = MovementMath.yawToFrame(rimBearing, playerBearing, half - margin)
+	lookAt = position + CFrame.Angles(0, extraYaw, 0) * forward
+
 	camera.CFrame = CFrame.lookAt(position, lookAt) * CFrame.Angles(-math.rad(Camera.RIM_ABOVE_CENTER), 0, 0)
 end
 

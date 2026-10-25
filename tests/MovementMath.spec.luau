@@ -100,4 +100,35 @@ t.describe("MovementMath.directionalSpeedScale", function()
 	end)
 end)
 
+t.describe("MovementMath.flatBearing", function()
+	t.test("straight ahead is 0, left is +, right is -", function()
+		t.near(MovementMath.flatBearing(0, -1, 0, -5), 0, 1e-9)
+		t.near(MovementMath.flatBearing(0, -1, -1, -1), math.rad(45), 1e-9)
+		t.near(MovementMath.flatBearing(0, -1, 1, -1), -math.rad(45), 1e-9)
+	end)
+
+	t.test("wraps round +/-180 instead of going the long way", function()
+		-- Facing +Z: a target slightly toward +X is just to the left, not ~360 degrees away.
+		t.near(MovementMath.flatBearing(0, 1, 0.1, 1), math.atan(0.1), 1e-9)
+	end)
+end)
+
+t.describe("MovementMath.yawToFrame", function()
+	local LIMIT = math.rad(30)
+
+	t.test("no turn when both are already in view", function()
+		t.near(MovementMath.yawToFrame(math.rad(20), math.rad(-10), LIMIT), 0, 1e-9)
+	end)
+
+	t.test("turns just enough to bring the rim in, keeping the player in", function()
+		t.near(MovementMath.yawToFrame(math.rad(45), 0, LIMIT), math.rad(15), 1e-9)
+		t.near(MovementMath.yawToFrame(math.rad(-45), 0, LIMIT), -math.rad(15), 1e-9)
+	end)
+
+	t.test("too far apart: the player stays on the edge, the rim goes", function()
+		t.near(MovementMath.yawToFrame(math.rad(50), math.rad(-20), LIMIT), math.rad(10), 1e-9)
+		t.near(MovementMath.yawToFrame(math.rad(-50), math.rad(20), LIMIT), -math.rad(10), 1e-9)
+	end)
+end)
+
 return nil

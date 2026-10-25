@@ -34,6 +34,21 @@ local Camera = {
 	-- left/right circle round it and you can't see the side you're moving toward).
 	RIM_FOLLOW = 0.25,
 
+	-- How far inside the left/right screen edge the rim and the player are kept, degrees.
+	-- Only matters when they're far apart on screen: on narrow screens (FIELD_OF_VIEW is
+	-- vertical, so they see less sideways) or behind the baseline. The camera then turns just
+	-- enough to keep both this far in from the edges.
+	RIM_EDGE_MARGIN = 10,
+
+	-- How far the view may widen (vertical degrees, like FIELD_OF_VIEW) when the rim and the
+	-- player are too far apart to both fit, e.g. behind the baseline. Past this the player
+	-- stays in view and the rim goes off screen. Higher = fits more, but more distortion.
+	MAX_FIELD_OF_VIEW = 80,
+
+	-- How see-through the backboard and stanchion go while the player is behind the baseline,
+	-- 0 to 1. Back there the camera looks through them at the player, so solid = player hidden.
+	BEHIND_BOARD_FADE = 0.8,
+
 	-- How quickly the camera catches up with the player. Higher = snappier, lower = floatier.
 	FOLLOW_SHARPNESS = 8,
 }

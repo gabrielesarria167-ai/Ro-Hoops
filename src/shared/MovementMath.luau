@@ -61,6 +61,29 @@ function MovementMath.smoothingAlpha(sharpness: number, dt: number): number
 	return 1 - math.exp(-sharpness * dt)
 end
 
+-- How far a target is to the side of straight ahead, radians: + = to the left (the way
+-- CFrame.Angles(0, yaw, 0) turns), - = to the right, between -pi and pi.
+-- `forward` / `toTarget` = flat X/Z directions (any length).
+function MovementMath.flatBearing(forwardX: number, forwardZ: number, toTargetX: number, toTargetZ: number): number
+	-- Roblox yaw of a flat direction: CFrame.Angles(0, yaw, 0).LookVector = (-sin, 0, -cos).
+	local bearing = math.atan2(-toTargetX, -toTargetZ) - math.atan2(-forwardX, -forwardZ)
+	return (bearing + math.pi) % (2 * math.pi) - math.pi -- wrap to [-pi, pi)
+end
+
+-- How much extra yaw (radians, + = turn left) the camera needs so the rim and the player,
+-- at these bearings (MovementMath.flatBearing), both end up within `limit` radians of
+-- straight ahead, turning as little as possible (0 when both already are). If they're too
+-- far apart to both fit, the player stays in view and the rim gets as close as it can.
+function MovementMath.yawToFrame(rimBearing: number, playerBearing: number, limit: number): number
+	-- Every turn between `low` and `high` keeps both inside.
+	local low = math.max(rimBearing, playerBearing) - limit
+	local high = math.min(rimBearing, playerBearing) + limit
+	if low <= high then
+		return math.clamp(0, low, high)
+	end
+	return math.clamp(rimBearing, playerBearing - limit, playerBearing + limit)
+end
+
 -- How much of the top speed the player gets when moving in a direction relative to the
 -- way they face (the rim). `towardRight` / `towardForward` = the movement direction in the
 -- player's own terms (any length). Like a real player who keeps facing the basket:
