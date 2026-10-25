@@ -447,8 +447,8 @@ local function release()
 	local difficulty = ShotMath.difficulty(config.DIFFICULTY, distanceFeet, Shooting)
 	local depthError, lateralError =
 		ShotMath.aimError(offset, difficulty, Shooting, random:NextNumber(), random:NextNumber())
-	-- The errors are tuned for a real-size hoop; scale them with the oversized ball and rim
-	-- so shooting is exactly as hard as at real size.
+	-- The errors are tuned for a real-size hoop; scale them with the ball and rim
+	-- (Court.EQUIPMENT_SCALE) so shooting is equally hard at any rim size.
 	local aimOffset = (toward * depthError + lateral * lateralError) * Court.EQUIPMENT_SCALE
 	local target = Court.RIM_POSITION + aimOffset
 

@@ -3,18 +3,18 @@
 -- Everything about the test ball: how it looks, how it bounces, where it sits while you
 -- dribble or gather a shot, and the rules that decide when a shot is over.
 --
--- Units: distances are in studs (Roblox's unit, 1 stud ≈ 1.18 ft at our scale), times in
+-- Units: distances are in studs (Roblox's unit, 1 stud ≈ 1.06 ft at our scale), times in
 -- seconds. Live-tunable in Studio under ReplicatedStorage > Tuning > Ball while playing.
-
-local Court = require(script.Parent.Court)
 
 local Ball = {
 	-- LOOK ------------------------------------------------------------------------------
 
-	-- Ball radius in studs: a real 9.4" ball (0.39 ft radius) scaled up with the rim by
-	-- Court.EQUIPMENT_SCALE, so it's bigger than the avatar's hand (~1.25 studs across).
+	-- Ball radius in studs. Bigger than real on purpose so it reads clearly bigger than the
+	-- avatar's (oversized) hand: about 1.26 studs across, the size used before the court was
+	-- rescaled. That makes the rim (Court.RIM_INNER_RADIUS) about 1.5× the ball's width
+	-- instead of the real ~1.9×, so there's less room for a clean make.
 	-- (Changing this live does not resize the ball; edit it here and restart Play.)
-	RADIUS = Court.ft(0.39) * Court.EQUIPMENT_SCALE,
+	RADIUS = 0.63,
 	-- Ball colour (red, green, blue from 0 to 255).
 	COLOR = Color3.fromRGB(214, 110, 40),
 
