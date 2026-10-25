@@ -138,12 +138,6 @@ local function step(dt: number)
 	faceRim(parts, dt)
 end
 
--- The screen's "up" and "right" directions flattened onto the floor (world space). Used
--- by SkillController to turn a mouse flick on screen into a direction on the court.
-function MovementController.getScreenAxes(): (Vector3, Vector3)
-	return screenAxes()
-end
-
 -- The player's current flat velocity, studs/s.
 -- The flat velocity the player is speeding up / slowing down toward, studs/s (zero when
 -- coming to a stop).

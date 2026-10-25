@@ -22,9 +22,8 @@
 --      SkillMath.detectCircle first (a circle is a spin), then SkillMath.detectSwipe (a
 --      fast straight stroke is a flick). Judging the whole stroke is what stops the start
 --      of a circle being read as a flick;
---   3. a flick is turned from a screen direction into the player's own directions (toward
---      their right / the way they face), so "flick left" sends the ball toward the left
---      of the screen whichever way the player is facing, and SkillMath.chooseMove picks
+--   3. a flick is read in the player's own directions (right = toward their right, up =
+--      the way they face), whichever way the camera looks, and SkillMath.chooseMove picks
 --      the move;
 --   4. BallController moves the ball; this controller moves the body in time with it.
 --
@@ -526,14 +525,11 @@ local function onFlick(dx: number, dy: number)
 	if not parts then
 		return
 	end
-	-- Screen direction → direction on the court → the player's own right / forward.
-	local screenUp, screenRight = MovementController.getScreenAxes()
-	local onCourt = screenRight * dx + screenUp * dy
-	local rootCFrame = parts.root.CFrame
-	local towardRight = onCourt:Dot(rootCFrame.RightVector)
-	local towardForward = onCourt:Dot(rootCFrame.LookVector)
-
-	local move = SkillMath.chooseMove(towardRight, towardForward, BallController.getHand(), Skills)
+	-- The flick is read relative to the player's body, not the screen (flick right = toward
+	-- their right, flick down = backward), since the camera doesn't always sit straight
+	-- behind them (Config/Camera.luau, RIM_FOLLOW): out in a corner, "screen left" can point
+	-- behind the player.
+	local move = SkillMath.chooseMove(dx, dy, BallController.getHand(), Skills)
 	if move then
 		startMove(move)
 	end
